@@ -17,6 +17,16 @@ import { AppText as Text } from "../../components/AppText";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { ConnectionFormField } from "./ConnectionFormField";
 import { ConnectionSheetButton } from "./ConnectionSheetButton";
+import {
+  EMPTY_SERVICE_AUTH_DRAFT,
+  EnvironmentServiceAuthFields,
+  serviceAuthFromDraft,
+  type EnvironmentServiceAuthDraft,
+} from "./EnvironmentServiceAuthFields";
+import {
+  removeServiceAuthForUrl,
+  setServiceAuthForUrl,
+} from "../../persistence/environment-service-auth";
 import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 
@@ -50,6 +60,9 @@ export function ConnectionsNewRouteScreen({
   const insets = useSafeAreaInsets();
   const [hostInput, setHostInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
+  const [serviceAuth, setServiceAuth] =
+    useState<EnvironmentServiceAuthDraft>(EMPTY_SERVICE_AUTH_DRAFT);
+  const [serviceAuthError, setServiceAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showScanner, setShowScanner] = useState(params.mode === "scan_qr");
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -177,8 +190,23 @@ export function ConnectionsNewRouteScreen({
   );
 
   const handleSubmit = useCallback(async () => {
-    await connectAndClose(buildPairingUrl(hostInput, codeInput), false);
-  }, [codeInput, connectAndClose, hostInput]);
+    const pairingUrl = buildPairingUrl(hostInput, codeInput);
+    try {
+      const auth = serviceAuthFromDraft(serviceAuth);
+      if (auth === null) {
+        await removeServiceAuthForUrl(pairingUrl);
+      } else {
+        await setServiceAuthForUrl(pairingUrl, auth);
+      }
+      setServiceAuthError(null);
+    } catch (error) {
+      setServiceAuthError(
+        error instanceof Error ? error.message : "Could not save service authentication.",
+      );
+      return;
+    }
+    await connectAndClose(pairingUrl, false);
+  }, [codeInput, connectAndClose, hostInput, serviceAuth]);
 
   useEffect(() => {
     if (!shouldAutoConnect || attemptedAutoConnectRef.current === routePairingUrl) {
@@ -265,7 +293,11 @@ export function ConnectionsNewRouteScreen({
                 onChangeText={handleCodeChange}
               />
 
-              {pairingConnectionError ? <ErrorBanner message={pairingConnectionError} /> : null}
+              <EnvironmentServiceAuthFields value={serviceAuth} onChange={setServiceAuth} />
+
+              {serviceAuthError || pairingConnectionError ? (
+                <ErrorBanner message={serviceAuthError ?? pairingConnectionError ?? ""} />
+              ) : null}
 
               <View className="android:flex-row android:justify-end">
                 <ConnectionSheetButton

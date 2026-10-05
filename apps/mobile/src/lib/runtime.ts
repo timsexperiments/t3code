@@ -5,6 +5,10 @@ import * as Socket from "effect/unstable/socket/Socket";
 import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 
 import { cryptoLayer } from "../features/cloud/dpop";
+import {
+  makeEnvironmentServiceAuthWebSocketConstructor,
+  withEnvironmentServiceAuth,
+} from "./service-auth-transport";
 import { managedRelayClientLayer } from "../features/cloud/managedRelayLayer";
 import { resolveCloudPublicConfig } from "../features/cloud/publicConfig";
 import { tracingLayer } from "../features/observability/tracing";
@@ -17,11 +21,15 @@ function configuredRelayUrl(): string {
   return resolveCloudPublicConfig().relay.url ?? "http://relay.invalid";
 }
 
-const httpClientLayer = remoteHttpClientLayer(fetch);
+const httpClientLayer = remoteHttpClientLayer(withEnvironmentServiceAuth(fetch));
+const webSocketConstructorLayer = Layer.succeed(
+  Socket.WebSocketConstructor,
+  makeEnvironmentServiceAuthWebSocketConstructor(),
+);
 
 type RuntimeLayerSource =
   | ReturnType<typeof managedRelayClientLayer>
-  | typeof Socket.layerWebSocketConstructorGlobal
+  | typeof webSocketConstructorLayer
   | typeof cryptoLayer
   | typeof httpClientLayer
   | typeof Persistence.layer
@@ -29,7 +37,7 @@ type RuntimeLayerSource =
 
 const runtimeLayer = Layer.merge(
   managedRelayClientLayer(configuredRelayUrl()),
-  Socket.layerWebSocketConstructorGlobal,
+  webSocketConstructorLayer,
 ).pipe(
   Layer.provideMerge(cryptoLayer),
   Layer.provideMerge(httpClientLayer),
