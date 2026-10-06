@@ -116,8 +116,8 @@ export function EnvironmentServiceAuthFields(props: {
       {props.value.kind === "custom-headers" ? (
         <>
           <Text className="text-xs leading-normal text-foreground-muted">
-            Sends these headers only to this environment’s HTTPS origin. Values are stored in the
-            device keychain.
+            Sends headers only to this environment's HTTPS origin. Stores values securely on this
+            device.
           </Text>
           {props.value.headers.map((header, index) => (
             <View

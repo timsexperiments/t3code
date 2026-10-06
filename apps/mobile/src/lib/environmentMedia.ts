@@ -27,7 +27,7 @@ function trimMediaCache() {
   }
 }
 
-/** Native media APIs cannot enforce our redirect rule. Give them a local file, never credentials. */
+// Native media APIs cannot restrict credential forwarding on redirects.
 export async function acquireEnvironmentMedia(uri: string, signal: AbortSignal) {
   if (signal.aborted) return null;
   const auth = serviceAuthForUrl(uri);
@@ -107,7 +107,6 @@ export async function acquireEnvironmentMedia(uri: string, signal: AbortSignal) 
   }
 }
 
-/** The hook owns the temporary file until its native consumer unmounts or changes sources. */
 export function useEnvironmentMediaUri(uri: string | null) {
   const auth = uri === null ? null : serviceAuthForUrl(uri);
   const [resolved, setResolved] = useState<{

@@ -32,7 +32,6 @@ function transferModule() {
   }>("T3NativeControls");
 }
 
-/** Initialize the native socket policy before handing credentials to RN's WebSocket. */
 export function makeEnvironmentWebSocketConstructor() {
   return makeEnvironmentServiceAuthWebSocketConstructor((url) => {
     const headers = serviceAuthHeadersForUrl(url);
@@ -41,7 +40,6 @@ export function makeEnvironmentWebSocketConstructor() {
   });
 }
 
-/** Stream from disk with native progress and cancellation; never follow credentialed redirects. */
 export async function uploadEnvironmentFile(input: {
   readonly file: File;
   readonly url: string;
@@ -80,7 +78,6 @@ export async function uploadEnvironmentFile(input: {
   }
 }
 
-/** Authenticated downloads stream to disk, retaining the existing cache's ownership rules. */
 export async function downloadEnvironmentFile(url: string, file: File, signal: AbortSignal) {
   if (serviceAuthHeadersForUrl(url) === null) {
     const { File } = await import("expo-file-system");

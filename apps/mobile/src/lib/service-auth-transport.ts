@@ -27,9 +27,7 @@ export function withEnvironmentServiceAuth(
     for (const [name, value] of Object.entries(serviceHeaders)) {
       mergedHeaders.set(name, value);
     }
-    // A followed cross-origin redirect could forward custom service headers.
-    // Credentialed environment requests therefore surface redirects to the
-    // caller instead of allowing the native fetch stack to follow them.
+    // Redirects can forward custom headers to another origin.
     return fetchFn(input, { ...init, headers: mergedHeaders, redirect: "manual" });
   };
 }

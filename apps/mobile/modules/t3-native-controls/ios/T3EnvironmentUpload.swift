@@ -1,6 +1,5 @@
 import Foundation
 
-/** Credentialed file transfers share a foreground session that refuses redirects. */
 final class T3EnvironmentUpload: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
   private var session: URLSession?
   private var task: URLSessionUploadTask?
@@ -49,7 +48,6 @@ final class T3EnvironmentUpload: NSObject, URLSessionTaskDelegate, URLSessionDat
   }
 
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-    // The upload endpoint has no response body to retain.
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

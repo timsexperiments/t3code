@@ -33,8 +33,7 @@ class T3NativeControlsModule : Module() {
     Name("T3NativeControls")
     Events("environmentTransferProgress")
     Function("configureEnvironmentWebSocket") {
-      // RN exposes one socket client builder for the app. Match iOS's refusal
-      // of redirects before any environment credentials enter a handshake.
+      // React Native uses one WebSocket client builder per app.
       WebSocketModule.setCustomClientBuilder(CustomClientBuilder { builder ->
         builder.followRedirects(false).followSslRedirects(false)
       })
@@ -85,7 +84,7 @@ class T3NativeControlsModule : Module() {
       })
     }.runOnQueue(Queues.MAIN)
     Function("cancelEnvironmentTransfer") { id: String ->
-      // Start and cancel share a queue so an immediate abort cannot precede registration.
+      // Queue cancellation after upload registration.
       android.os.Handler(android.os.Looper.getMainLooper()).post {
         environmentUploads[id]?.cancel()
       }

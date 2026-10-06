@@ -4,7 +4,6 @@ import { Image as ExpoImage, type ImageProps as ExpoImageProps } from "expo-imag
 
 import { useEnvironmentMediaUri } from "../lib/environmentMedia";
 
-/** Network images use the same authenticated, redirect-safe asset transport as file previews. */
 export function EnvironmentImage(
   props: Omit<ImageProps, "source"> & {
     readonly uri: string;

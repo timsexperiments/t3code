@@ -62,6 +62,19 @@ created in Settings can only be copied from the client that created them while
 its Connections page stays open. If you leave or reload that page, create
 another link to share.
 
+### Connect through an authentication proxy
+
+On mobile, use **Service authentication → Custom** when adding a direct HTTPS
+environment. Enter the header names and values required by your proxy. For a saved
+connection, open **Settings → Environments**, select the environment, and choose
+**Edit**. Choose **None** to remove the headers.
+
+Credentials stay on this device and apply only to the configured HTTPS origin,
+including its port. Authenticated requests do not follow redirects. Use the
+server's final HTTPS URL and pair with T3 Code as usual.
+
+Videos from authenticated environments download before playback starts.
+
 ### Reach one machine several ways
 
 A machine can have more than one route: LAN, Tailscale, a public URL, SSH, or
