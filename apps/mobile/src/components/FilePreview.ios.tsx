@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent, useId } from "react";
 import { Alert } from "react-native";
 
 import type { ResolvedFilePreviewSource } from "./FilePreviewModal.types";
+import { acquireEnvironmentMedia } from "../lib/environmentMedia";
 
 const NativeControls = requireNativeModule<{
   presentFile(
@@ -28,16 +29,30 @@ function NativeFilePreview(props: {
   });
 
   useEffect(() => {
-    let canceled = false;
-    void NativeControls.presentFile(uri, name ?? "Preview", sourceIdentifier ?? "", identifier)
+    const controller = new AbortController();
+    void (async () => {
+      const file = await acquireEnvironmentMedia(uri, controller.signal);
+      if (!file) return;
+      try {
+        if (!controller.signal.aborted)
+          await NativeControls.presentFile(
+            file.uri,
+            name ?? "Preview",
+            sourceIdentifier ?? "",
+            identifier,
+          );
+      } finally {
+        file.dispose();
+      }
+    })()
       .catch((error: unknown) => {
-        if (!canceled) onOpenError(error);
+        if (!controller.signal.aborted) onOpenError(error);
       })
       .finally(() => {
-        if (!canceled) onRequestClose();
+        if (!controller.signal.aborted) onRequestClose();
       });
     return () => {
-      canceled = true;
+      controller.abort();
       void NativeControls.dismissFile(identifier).catch(() => undefined);
     };
   }, [uri, name, sourceIdentifier, identifier]);

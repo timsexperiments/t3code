@@ -5,12 +5,20 @@ import { WebView } from "react-native-webview";
 import { AppText as Text } from "../../components/AppText";
 import { FilePreviewLoading } from "./FilePreviewFeedback";
 import { LoadingStrip } from "../../components/LoadingStrip";
+import { useEnvironmentMediaUri } from "../../lib/environmentMedia";
 
 export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) {
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const media = useEnvironmentMediaUri(props.uri);
 
-  if (props.uri === null) {
+  if (media.error)
+    return (
+      <View className="flex-1 items-center justify-center bg-card">
+        <Text>{media.error.message}</Text>
+      </View>
+    );
+  if (media.uri === null) {
     return <FilePreviewLoading message="Preparing preview..." background="card" />;
   }
 
@@ -24,7 +32,7 @@ export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) 
         </View>
       ) : null}
       <WebView
-        source={{ uri: props.uri }}
+        source={{ uri: media.uri }}
         originWhitelist={["*"]}
         allowsBackForwardNavigationGestures
         allowsFullscreenVideo

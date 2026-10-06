@@ -1,6 +1,7 @@
 import type { VideoThumbnail } from "expo-video";
 
 import type { AttachmentPreviewFile } from "./attachmentDownload";
+import { acquireEnvironmentMedia } from "./environmentMedia";
 
 const thumbnails = new Map<string, VideoThumbnail>();
 const MAX_CACHED_THUMBNAILS = 32;
@@ -63,8 +64,11 @@ export function loadVideoThumbnail(
 
       const source = await resolveSource(signal);
       if (!source) return null;
+      let media: Awaited<ReturnType<typeof acquireEnvironmentMedia>> = null;
       try {
-        const thumbnail = await extractFrame(source.uri, signal);
+        media = await acquireEnvironmentMedia(source.uri, signal);
+        if (!media) return null;
+        const thumbnail = await extractFrame(media.uri, signal);
         if (!thumbnail || signal.aborted) return null;
         thumbnails.set(key, thumbnail);
         if (thumbnails.size > MAX_CACHED_THUMBNAILS) {
@@ -72,6 +76,7 @@ export function loadVideoThumbnail(
         }
         return thumbnail;
       } finally {
+        media?.dispose();
         source.dispose();
       }
     })

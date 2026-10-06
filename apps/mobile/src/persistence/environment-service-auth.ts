@@ -87,8 +87,14 @@ export function makeCustomHeadersServiceAuth(
       throw new Error(`The ${name} service-auth header is configured more than once.`);
     }
     names.add(lower);
-    if (!header.value) {
+    if (!header.value.trim()) {
       throw new Error(`Enter a value for the ${name} service-auth header.`);
+    }
+    // oxlint-disable-next-line no-control-regex -- HTTP header values cannot contain these bytes.
+    if (/[\u0000-\u0008\u000a-\u001f\u007f]/.test(header.value)) {
+      throw new Error(
+        `The ${name} service-auth header contains a line break or control character.`,
+      );
     }
     return new ServiceAuthHeader({ name, value: header.value });
   });
@@ -126,10 +132,13 @@ export function serviceAuthHeadersForUrl(input: string): Readonly<Record<string,
   return auth === null ? null : headersForAuth(auth);
 }
 
-async function persist(next: EnvironmentServiceAuthDocument): Promise<void> {
+async function persist(
+  update: (current: EnvironmentServiceAuthDocument) => EnvironmentServiceAuthDocument,
+): Promise<void> {
   pendingWrite = pendingWrite
     .catch(() => undefined)
     .then(async () => {
+      const next = update(document);
       await SecureStore.setItemAsync(SERVICE_AUTH_STORAGE_KEY, JSON.stringify(next), {
         keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
       });
@@ -143,10 +152,9 @@ export async function setServiceAuthForUrl(
   auth: EnvironmentServiceAuth | null,
 ): Promise<void> {
   const origin = normalizeServiceAuthOrigin(input);
-  const entries = document.entries.filter((entry) => entry.origin !== origin);
-  await persist({
-    schemaVersion: 1,
-    entries: auth === null ? entries : [...entries, { origin, auth }],
+  await persist((current) => {
+    const entries = current.entries.filter((entry) => entry.origin !== origin);
+    return { schemaVersion: 1, entries: auth === null ? entries : [...entries, { origin, auth }] };
   });
 }
 
@@ -162,13 +170,15 @@ export async function moveServiceAuth(
     previousOrigin = null;
   }
   const nextOrigin = auth === null ? null : normalizeServiceAuthOrigin(nextUrl);
-  const entries = document.entries.filter(
-    (entry) => entry.origin !== previousOrigin && entry.origin !== nextOrigin,
-  );
-  await persist({
-    schemaVersion: 1,
-    entries:
-      auth === null || nextOrigin === null ? entries : [...entries, { origin: nextOrigin, auth }],
+  await persist((current) => {
+    const entries = current.entries.filter(
+      (entry) => entry.origin !== previousOrigin && entry.origin !== nextOrigin,
+    );
+    return {
+      schemaVersion: 1,
+      entries:
+        auth === null || nextOrigin === null ? entries : [...entries, { origin: nextOrigin, auth }],
+    };
   });
 }
 
@@ -179,11 +189,10 @@ export async function removeServiceAuthForUrl(input: string): Promise<void> {
   } catch {
     return;
   }
-  const entries = document.entries.filter((entry) => entry.origin !== origin);
-  if (entries.length === document.entries.length) {
-    return;
-  }
-  await persist({ schemaVersion: 1, entries });
+  await persist((current) => ({
+    schemaVersion: 1,
+    entries: current.entries.filter((entry) => entry.origin !== origin),
+  }));
 }
 
 export function clearServiceAuthDocumentForTests(): void {

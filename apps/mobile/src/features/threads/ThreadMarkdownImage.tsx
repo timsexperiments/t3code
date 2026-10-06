@@ -1,15 +1,9 @@
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { createContext, useContext, useEffect, useId, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 
 import { AppText as Text } from "../../components/AppText";
+import { EnvironmentImage } from "../../components/EnvironmentImage";
 import type { FilePreviewSource } from "../../components/FilePreviewModal";
 import { MediaActionsMenu } from "../../components/MediaActionsMenu";
 import { PresentationSource } from "../../components/NativePresentation";
@@ -152,8 +146,9 @@ function ThreadMarkdownImageRequest(props: {
 
   return (
     <>
-      <Image
-        source={{ uri: props.uri }}
+      <EnvironmentImage
+        uri={props.uri}
+        onTransportError={props.onError}
         resizeMode="contain"
         accessible={false}
         onLoad={(event) => {

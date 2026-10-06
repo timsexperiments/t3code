@@ -9,8 +9,31 @@ public final class T3NativeControlsModule: Module {
   private let presentationSources = T3PresentationSources()
   private var videoPresentation: T3NativeVideoPresentation?
   private var filePresentation: T3NativeFilePresentation?
+  private var environmentUploads: [String: T3EnvironmentUpload] = [:]
 
   public func definition() -> ModuleDefinition {
+    Events("environmentTransferProgress")
+    Function("configureEnvironmentWebSocket") {
+      // SocketRocket validates the handshake directly and never follows redirects.
+    }
+    AsyncFunction("uploadEnvironmentFile") { (id: String, url: URL, file: URL, headers: [String: String], promise: Promise) in
+      let upload = T3EnvironmentUpload(progress: { [weak self] sent, total in
+        self?.sendEvent("environmentTransferProgress", ["id": id, "sent": sent, "total": total])
+      }, completion: { [weak self] result in
+        DispatchQueue.main.async {
+          self?.environmentUploads.removeValue(forKey: id)
+          switch result {
+          case .success(let status): promise.resolve(["status": status])
+          case .failure(let error): promise.reject(error)
+          }
+        }
+      })
+      self.environmentUploads[id] = upload
+      upload.start(url: url, file: file, headers: headers)
+    }.runOnQueue(.main)
+    Function("cancelEnvironmentTransfer") { (id: String) in
+      DispatchQueue.main.async { self.environmentUploads[id]?.cancel() }
+    }
     AsyncFunction("presentVideo") { (url: URL, title: String, sourceIdentifier: String, identifier: String, promise: Promise) in
       try self.presentVideo(
         url: url,
@@ -27,6 +50,8 @@ public final class T3NativeControlsModule: Module {
     }.runOnQueue(.main)
 
     OnDestroy {
+      for upload in self.environmentUploads.values { upload.cancel() }
+      self.environmentUploads.removeAll()
       let presentation = self.videoPresentation
       let file = self.filePresentation
       DispatchQueue.main.async {

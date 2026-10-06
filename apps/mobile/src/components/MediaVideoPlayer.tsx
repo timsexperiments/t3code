@@ -9,6 +9,7 @@ import { SymbolView } from "./AppSymbol";
 import { VideoThumbnailImage } from "./VideoThumbnailImage";
 import { useMediaActions, type MediaActionsSource } from "../lib/mediaActions";
 import { MediaActionsMenu } from "./MediaActionsMenu";
+import { acquireEnvironmentMedia } from "../lib/environmentMedia";
 
 /** Loads only after Play or opening the viewer. Source replacement never starts playback itself. */
 function LoadedMediaVideo(props: {
@@ -20,6 +21,7 @@ function LoadedMediaVideo(props: {
   const focused = useIsFocused();
   const active = useRef(focused && AppState.currentState === "active");
   const fullscreen = useRef(false);
+  const releaseMedia = useRef<(() => void) | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
   // Expo's Android player also reports completed playback as idle.
   const [loadState, setLoadState] = useState<"pending" | "complete" | "error">("pending");
@@ -33,7 +35,12 @@ function LoadedMediaVideo(props: {
     if (signal.aborted) return;
     if (uri === null) throw new Error("Video unavailable");
     player.pause();
-    await player.replaceAsync({ uri, contentType: "progressive" });
+    const media = await acquireEnvironmentMedia(uri, signal);
+    if (!media) return;
+    if (signal.aborted) return media.dispose();
+    releaseMedia.current?.();
+    releaseMedia.current = media.dispose;
+    await player.replaceAsync({ uri: media.uri, contentType: "progressive" });
     if (!signal.aborted && props.playRequested && active.current) player.play();
   });
 
@@ -61,7 +68,12 @@ function LoadedMediaVideo(props: {
         if (!controller.signal.aborted) setLoadState("error");
       },
     );
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      player.pause();
+      releaseMedia.current?.();
+      releaseMedia.current = undefined;
+    };
   }, [player, props.playRequested, attempt]);
 
   return (

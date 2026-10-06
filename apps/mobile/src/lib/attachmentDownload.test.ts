@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   uuid: vi.fn(),
 }));
 
+vi.mock("expo/fetch", () => ({ fetch: vi.fn() }));
+vi.mock("expo-secure-store", () => ({ getItem: () => null, setItemAsync: async () => undefined }));
+
 vi.mock("expo-file-system", () => {
   class Directory {
     readonly uri: string;

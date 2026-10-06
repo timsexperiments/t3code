@@ -1,4 +1,5 @@
 import { ThreadContextDivider } from "./thread-context-divider";
+import { EnvironmentImage } from "../../components/EnvironmentImage";
 import { ThreadHandoffRow } from "./thread-handoff-row";
 import {
   WorktreeWorkingHeader,
@@ -434,8 +435,14 @@ function MessageAttachmentImage(props: {
           })
         }
       >
-        <Image
-          source={{ uri }}
+        <EnvironmentImage
+          uri={uri}
+          onTransportError={() => {
+            if (!retriedImage.current) {
+              retriedImage.current = true;
+              void refreshAssetUrl();
+            }
+          }}
           className={props.className}
           resizeMode="cover"
           onLoad={() => {

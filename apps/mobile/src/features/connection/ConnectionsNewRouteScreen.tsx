@@ -26,6 +26,8 @@ import {
 import {
   removeServiceAuthForUrl,
   setServiceAuthForUrl,
+  serviceAuthForUrl,
+  moveServiceAuth,
 } from "../../persistence/environment-service-auth";
 import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
@@ -182,6 +184,7 @@ export function ConnectionsNewRouteScreen({
             navigation.goBack();
           }
         }
+        return result;
       } finally {
         setIsSubmitting(false);
       }
@@ -191,6 +194,7 @@ export function ConnectionsNewRouteScreen({
 
   const handleSubmit = useCallback(async () => {
     const pairingUrl = buildPairingUrl(hostInput, codeInput);
+    const previousAuth = serviceAuthForUrl(pairingUrl);
     try {
       const auth = serviceAuthFromDraft(serviceAuth);
       if (auth === null) {
@@ -205,7 +209,14 @@ export function ConnectionsNewRouteScreen({
       );
       return;
     }
-    await connectAndClose(pairingUrl, false);
+    try {
+      const result = await connectAndClose(pairingUrl, false);
+      if (!AsyncResult.isSuccess(result))
+        await moveServiceAuth(pairingUrl, pairingUrl, previousAuth);
+    } catch (cause) {
+      await moveServiceAuth(pairingUrl, pairingUrl, previousAuth);
+      throw cause;
+    }
   }, [codeInput, connectAndClose, hostInput, serviceAuth]);
 
   useEffect(() => {

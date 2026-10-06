@@ -1,5 +1,6 @@
-import { useId, useMemo, useState } from "react";
-import { Image, Pressable, View } from "react-native";
+import { useId, useState } from "react";
+import { Pressable, View } from "react-native";
+import { EnvironmentImage } from "../../components/EnvironmentImage";
 
 import { FilePreviewLoading } from "./FilePreviewFeedback";
 import { EmptyState } from "../../components/EmptyState";
@@ -17,10 +18,6 @@ function ResolvedWorkspaceFileImagePreview(props: {
   const [preview, setPreview] = useState<FilePreviewSource | null>(null);
   const sourceIdentifier = useId();
   const mediaActions = useMediaActions(props.actionsSource);
-  const imageSource = useMemo(
-    () => ({ uri: props.uri, cache: "force-cache" as const }),
-    [props.uri],
-  );
 
   return (
     <View className="relative flex-1 bg-subtle">
@@ -44,9 +41,10 @@ function ResolvedWorkspaceFileImagePreview(props: {
           }
         >
           <PresentationSource identifier={sourceIdentifier} style={{ flex: 1 }}>
-            <Image
+            <EnvironmentImage
               accessible={false}
-              source={imageSource}
+              uri={props.uri}
+              onTransportError={() => setLoadError("The image could not be loaded.")}
               className="h-full w-full"
               resizeMode="contain"
               onLoadStart={() => setLoadError(null)}

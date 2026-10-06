@@ -15,6 +15,16 @@ const mocks = vi.hoisted(() => ({
   writeFile: vi.fn(),
   deleteFile: vi.fn(),
   readBase64: vi.fn(),
+  nativeUpload: vi.fn(),
+}));
+
+vi.mock("expo/fetch", () => ({ fetch: vi.fn() }));
+vi.mock("expo", () => ({
+  requireNativeModule: () => ({
+    uploadEnvironmentFile: mocks.nativeUpload,
+    cancelEnvironmentTransfer: vi.fn(),
+    addListener: () => ({ remove: vi.fn() }),
+  }),
 }));
 
 vi.mock("expo-secure-store", () => ({
@@ -214,6 +224,8 @@ describe("prepareTurnAttachments", () => {
     mocks.runAtomCommand.mockReset();
     mocks.readAtom.mockReset();
     mocks.upload.mockReset();
+    mocks.nativeUpload.mockReset();
+    mocks.nativeUpload.mockResolvedValue({ status: 204 });
     mocks.writeFile.mockReset();
     mocks.deleteFile.mockReset();
     mocks.readBase64.mockReset();
@@ -251,17 +263,26 @@ describe("prepareTurnAttachments", () => {
       attachments: [fileBackedImage],
       supportsImageUploads: true,
     });
+    if (sendsHeaders) {
+      expect(mocks.upload).not.toHaveBeenCalled();
+      expect(mocks.nativeUpload).toHaveBeenCalledWith(
+        "uuid",
+        "https://environment.example/api/attachments/upload/signed",
+        fileBackedImage.fileUri,
+        {
+          "CF-Access-Client-Id": "test-client",
+          "CF-Access-Client-Secret": "test-secret",
+          "Content-Type": "image/png",
+        },
+      );
+      return;
+    }
+    expect(mocks.nativeUpload).not.toHaveBeenCalled();
     expect(mocks.upload).toHaveBeenCalledWith(
       fileBackedImage.fileUri,
       "https://environment.example/api/attachments/upload/signed",
       expect.objectContaining({
-        headers: sendsHeaders
-          ? {
-              "CF-Access-Client-Id": "test-client",
-              "CF-Access-Client-Secret": "test-secret",
-              "Content-Type": "image/png",
-            }
-          : { "Content-Type": "image/png" },
+        headers: { "Content-Type": "image/png" },
       }),
     );
   });

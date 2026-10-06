@@ -1,6 +1,6 @@
 import { SymbolView } from "./AppSymbol";
 import { AppText } from "./AppText";
-import { Image } from "expo-image";
+import { EnvironmentExpoImage } from "./EnvironmentImage";
 import { memo, useLayoutEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import type { EnvironmentId, ProjectIconOverride } from "@t3tools/contracts";
@@ -190,13 +190,11 @@ function ProjectFaviconImage(props: {
 
       {/* Favicon image (hidden until loaded) */}
       {requestIsActive ? (
-        <Image
+        <EnvironmentExpoImage
           key={faviconRequest.faviconUrl}
-          source={
-            faviconRequest.faviconUrl.startsWith("data:")
-              ? { uri: faviconRequest.faviconUrl }
-              : { uri: faviconRequest.faviconUrl, cacheKey: faviconRequest.cacheKey }
-          }
+          uri={faviconRequest.faviconUrl}
+          cacheKey={faviconRequest.cacheKey}
+          onTransportError={() => setStatus("error")}
           cachePolicy={faviconRequest.faviconUrl.startsWith("data:") ? "memory" : "memory-disk"}
           recyclingKey={faviconRequest.cacheKey}
           accessibilityLabel={`${props.projectTitle} favicon`}

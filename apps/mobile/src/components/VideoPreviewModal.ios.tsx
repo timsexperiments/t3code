@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useId, useState } from "react";
 import { Alert, Keyboard } from "react-native";
 
 import { loadLocalAttachmentPreview } from "../lib/localAttachmentPreview";
+import { acquireEnvironmentMedia } from "../lib/environmentMedia";
 import { mediaVideoPreviewUri, type VideoPreviewSource } from "../lib/videoPreviewSource";
 import { useAssetUrlState, useRefreshAssetUrl } from "../state/assets";
 import { usePreparedConnection } from "../state/session";
@@ -68,13 +69,13 @@ function NativeVideoPreview(props: {
       const file =
         localAttachment !== null
           ? await loadLocalAttachmentPreview(localAttachment, controller.signal)
-          : null;
-      if (localAttachment !== null && !file) return;
+          : await acquireEnvironmentMedia(playbackUrl!, controller.signal);
+      if (!file) return;
       try {
         if (controller.signal.aborted) return;
         ready = true;
         await NativeControls.presentVideo(
-          file?.uri ?? playbackUrl!,
+          file.uri,
           name,
           source.sourceIdentifier ?? "",
           identifier,
