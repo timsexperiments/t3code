@@ -17,6 +17,12 @@ const mocks = vi.hoisted(() => ({
   readBase64: vi.fn(),
 }));
 
+vi.mock("expo-secure-store", () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
+  getItem: () => null,
+  setItemAsync: async () => undefined,
+}));
+
 vi.mock("@t3tools/client-runtime/state/runtime", () => ({
   // The client-runtime attachments module resolves the same file through its
   // relative import, so these fakes also feed runAttachmentUploadCycle and
@@ -98,6 +104,11 @@ import {
   validateDraftFileAttachments,
 } from "./attachmentUpload";
 import type { DraftComposerAttachment } from "./composerImages";
+import {
+  clearServiceAuthDocumentForTests,
+  makeCustomHeadersServiceAuth,
+  setServiceAuthForUrl,
+} from "../persistence/environment-service-auth";
 
 const environmentId = EnvironmentId.make("environment-1");
 const MINTED_ID = "pending-00000000-0000-4000-8000-000000000001-pdf";
@@ -194,6 +205,7 @@ function removeCallsFor(attachmentId: string): number {
 
 describe("prepareTurnAttachments", () => {
   beforeEach(() => {
+    clearServiceAuthDocumentForTests();
     mocks.documentUri = "file:///documents";
     mocks.createAssetUrl.mockReset();
     mocks.createAssetUrl.mockImplementation((target: unknown) => target);
@@ -220,6 +232,38 @@ describe("prepareTurnAttachments", () => {
         : { _tag: "Success", value: undefined },
     );
     mocks.upload.mockResolvedValue({ status: 204, body: "", headers: {} });
+  });
+
+  it.each([
+    ["https://environment.example", true],
+    ["https://other.example", false],
+    ["https://environment.example:444", false],
+  ])("scopes native upload credentials to %s", async (origin, sendsHeaders) => {
+    await setServiceAuthForUrl(
+      origin,
+      makeCustomHeadersServiceAuth([
+        { name: "CF-Access-Client-Id", value: "test-client" },
+        { name: "CF-Access-Client-Secret", value: "test-secret" },
+      ]),
+    );
+    await prepareTurnAttachments({
+      environmentId,
+      attachments: [fileBackedImage],
+      supportsImageUploads: true,
+    });
+    expect(mocks.upload).toHaveBeenCalledWith(
+      fileBackedImage.fileUri,
+      "https://environment.example/api/attachments/upload/signed",
+      expect.objectContaining({
+        headers: sendsHeaders
+          ? {
+              "CF-Access-Client-Id": "test-client",
+              "CF-Access-Client-Secret": "test-secret",
+              "Content-Type": "image/png",
+            }
+          : { "Content-Type": "image/png" },
+      }),
+    );
   });
 
   it("keeps existing image attachments on the legacy wire path", async () => {

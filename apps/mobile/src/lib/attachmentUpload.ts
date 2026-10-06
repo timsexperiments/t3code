@@ -16,6 +16,7 @@ import type {
 import { PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 
+import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
 import { appAtomRegistry } from "../state/atom-registry";
 import { assetEnvironment } from "../state/assets";
 import { attachmentEnvironment } from "../state/attachments";
@@ -283,7 +284,10 @@ async function uploadFileBytes(
     const result = await file.upload(url, {
       httpMethod: "POST",
       uploadType: UploadType.BINARY_CONTENT,
-      headers: { "Content-Type": composerAttachmentWireMimeType(attachment) },
+      headers: {
+        ...serviceAuthHeadersForUrl(url),
+        "Content-Type": composerAttachmentWireMimeType(attachment),
+      },
       signal,
       ...(onProgress
         ? {
