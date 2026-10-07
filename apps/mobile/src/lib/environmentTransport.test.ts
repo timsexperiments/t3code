@@ -3,10 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn<typeof fetch>(),
   configureSocket: vi.fn(),
-  nativeUpload: vi.fn(),
-  cancel: vi.fn(),
-  listener: vi.fn(),
-  removeListener: vi.fn(),
   upload: vi.fn(),
   download: vi.fn(),
   create: vi.fn(),
@@ -16,9 +12,6 @@ vi.mock("expo/fetch", () => ({ fetch: mocks.fetch }));
 vi.mock("expo", () => ({
   requireNativeModule: () => ({
     configureEnvironmentWebSocket: mocks.configureSocket,
-    uploadEnvironmentFile: mocks.nativeUpload,
-    cancelEnvironmentTransfer: mocks.cancel,
-    addListener: mocks.listener,
   }),
 }));
 vi.mock("expo-secure-store", () => ({
@@ -26,7 +19,6 @@ vi.mock("expo-secure-store", () => ({
   getItem: () => null,
   setItemAsync: async () => undefined,
 }));
-vi.mock("./uuid", () => ({ uuidv4: () => "transfer-id" }));
 vi.mock("expo-file-system", () => ({
   File: class {
     static downloadFileAsync = mocks.download;
@@ -60,7 +52,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.written = [];
   clearServiceAuthDocumentForTests();
-  mocks.listener.mockReturnValue({ remove: mocks.removeListener });
 });
 const protectedUrl = "https://protected.example/file";
 async function credentials() {
@@ -135,29 +126,41 @@ describe("environment transport", () => {
     expect(mocks.fetch.mock.calls[1]?.[1]).toBeUndefined();
   });
 
-  it("uses the guarded native uploader and forwards progress only for its transfer", async () => {
+  it("keeps Expo upload progress and cancellation while refusing authenticated redirects", async () => {
     await credentials();
+    mocks.upload.mockResolvedValue({ status: 204 });
     const progress = vi.fn();
-    const done = Promise.withResolvers<{ status: number }>();
-    mocks.nativeUpload.mockReturnValue(done.promise);
-    const controller = new AbortController();
-    const uploading = uploadEnvironmentFile({
+    const signal = new AbortController().signal;
+    await uploadEnvironmentFile({
       file: new File("file:///upload"),
       url: protectedUrl,
       contentType: "image/png",
-      signal: controller.signal,
+      signal,
       onProgress: progress,
     });
-    const listener = mocks.listener.mock.calls[0]?.[1];
-    listener({ id: "other", sent: 1, total: 2 });
-    listener({ id: "transfer-id", sent: 1, total: 2 });
+    const [url, options] = mocks.upload.mock.calls[0]!;
+    expect(url).toBe(protectedUrl);
+    expect(options).toMatchObject({
+      followRedirects: false,
+      signal,
+      headers: { "X-Service-Token": "synthetic-token", "Content-Type": "image/png" },
+    });
+    options.onProgress({ bytesSent: 1, totalBytes: 2 });
+    options.onProgress({ bytesSent: 1, totalBytes: 0 });
     expect(progress.mock.calls).toEqual([[0.5]]);
-    controller.abort();
-    expect(mocks.cancel).toHaveBeenCalledWith("transfer-id");
-    done.resolve({ status: 204 });
-    await uploading;
-    expect(mocks.upload).not.toHaveBeenCalled();
-    expect(mocks.removeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the default redirect behavior for uncredentialed uploads", async () => {
+    await credentials();
+    await uploadEnvironmentFile({
+      file: new File("file:///upload"),
+      url: "https://other.example/upload",
+      contentType: "image/png",
+      signal: new AbortController().signal,
+    });
+    const options = mocks.upload.mock.calls[0]?.[1];
+    expect(options.headers).toEqual({ "Content-Type": "image/png" });
+    expect(options).not.toHaveProperty("followRedirects");
   });
 
   it("does not start canceled transfers", async () => {
@@ -172,7 +175,7 @@ describe("environment transport", () => {
         signal: controller.signal,
       }),
     ).rejects.toThrow("cancelled");
-    expect(mocks.nativeUpload).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
   });
 
   it("keeps ordinary file downloads on the existing native path", async () => {
