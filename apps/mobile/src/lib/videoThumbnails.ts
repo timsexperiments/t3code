@@ -1,7 +1,7 @@
+import { environmentMediaSource } from "./service-auth-transport";
 import type { VideoThumbnail } from "expo-video";
 
 import type { AttachmentPreviewFile } from "./attachmentDownload";
-import { acquireEnvironmentMedia } from "./environmentMedia";
 
 const thumbnails = new Map<string, VideoThumbnail>();
 const MAX_CACHED_THUMBNAILS = 32;
@@ -28,7 +28,7 @@ async function extractFrame(uri: string, signal: AbortSignal) {
     // An unreachable environment must not hold up thumbnails for other environments.
     timeout = setTimeout(cancel, 15_000);
     const frame = (async () => {
-      await player.replaceAsync({ uri, contentType: "progressive" });
+      await player.replaceAsync({ ...environmentMediaSource(uri), contentType: "progressive" });
       if (disposed || signal.aborted) return null;
       const [thumbnail] = await player.generateThumbnailsAsync([0], {
         maxWidth: 480,
@@ -64,11 +64,8 @@ export function loadVideoThumbnail(
 
       const source = await resolveSource(signal);
       if (!source) return null;
-      let media: Awaited<ReturnType<typeof acquireEnvironmentMedia>> = null;
       try {
-        media = await acquireEnvironmentMedia(source.uri, signal);
-        if (!media) return null;
-        const thumbnail = await extractFrame(media.uri, signal);
+        const thumbnail = await extractFrame(source.uri, signal);
         if (!thumbnail || signal.aborted) return null;
         thumbnails.set(key, thumbnail);
         if (thumbnails.size > MAX_CACHED_THUMBNAILS) {
@@ -76,7 +73,6 @@ export function loadVideoThumbnail(
         }
         return thumbnail;
       } finally {
-        media?.dispose();
         source.dispose();
       }
     })

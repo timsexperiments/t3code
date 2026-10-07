@@ -1,9 +1,9 @@
+import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId } from "react";
 import { Alert } from "react-native";
 
 import type { ResolvedFilePreviewSource } from "./FilePreviewModal.types";
-import { acquireEnvironmentMedia } from "../lib/environmentMedia";
 
 const NativeControls = requireNativeModule<{
   presentFile(
@@ -11,6 +11,7 @@ const NativeControls = requireNativeModule<{
     name: string,
     sourceIdentifier: string,
     identifier: string,
+    headers: Readonly<Record<string, string>>,
   ): Promise<void>;
   dismissFile(identifier: string): Promise<void>;
 }>("T3NativeControls");
@@ -29,30 +30,22 @@ function NativeFilePreview(props: {
   });
 
   useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      const file = await acquireEnvironmentMedia(uri, controller.signal);
-      if (!file) return;
-      try {
-        if (!controller.signal.aborted)
-          await NativeControls.presentFile(
-            file.uri,
-            name ?? "Preview",
-            sourceIdentifier ?? "",
-            identifier,
-          );
-      } finally {
-        file.dispose();
-      }
-    })()
+    let canceled = false;
+    void NativeControls.presentFile(
+      uri,
+      name ?? "Preview",
+      sourceIdentifier ?? "",
+      identifier,
+      serviceAuthHeadersForUrl(uri) ?? {},
+    )
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) onOpenError(error);
+        if (!canceled) onOpenError(error);
       })
       .finally(() => {
-        if (!controller.signal.aborted) onRequestClose();
+        if (!canceled) onRequestClose();
       });
     return () => {
-      controller.abort();
+      canceled = true;
       void NativeControls.dismissFile(identifier).catch(() => undefined);
     };
   }, [uri, name, sourceIdentifier, identifier]);

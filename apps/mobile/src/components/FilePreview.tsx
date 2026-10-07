@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/service-auth-transport";
 import { useEffect, useEffectEvent } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
@@ -6,8 +7,6 @@ import { openAttachmentInViewer } from "../lib/attachmentDownload";
 import type { ResolvedFilePreviewSource } from "./FilePreviewModal.types";
 import { MediaImagePreview } from "./MediaImagePreview";
 import { AppText as Text } from "./AppText";
-import { useEnvironmentMediaUri } from "../lib/environmentMedia";
-import { ActivityIndicator } from "react-native";
 
 function DocumentPreview(props: {
   readonly source: ResolvedFilePreviewSource;
@@ -72,25 +71,11 @@ export function FilePreview(props: {
   readonly onRequestClose: () => void;
   readonly onOpenError?: (error: unknown) => void;
 }) {
-  const media = useEnvironmentMediaUri(props.source.kind === "image" ? props.source.uri : null);
   if (props.source.kind !== "image") return <DocumentPreview {...props} />;
-  if (media.uri === null)
-    return (
-      <Modal transparent onRequestClose={props.onRequestClose}>
-        <View className="flex-1 items-center justify-center bg-backdrop">
-          <ActivityIndicator />
-          <Text>{media.error?.message ?? "Loading image…"}</Text>
-          <Pressable onPress={props.onRequestClose}>
-            <Text>Close</Text>
-          </Pressable>
-        </View>
-      </Modal>
-    );
-  if (props.source.actionsSource)
-    return <MediaImagePreview {...props} source={{ ...props.source, uri: media.uri }} />;
+  if (props.source.actionsSource) return <MediaImagePreview {...props} />;
   return (
     <ImageViewing
-      images={[{ uri: media.uri }]}
+      images={[environmentMediaSource(props.source.uri)]}
       imageIndex={0}
       visible
       onRequestClose={props.onRequestClose}

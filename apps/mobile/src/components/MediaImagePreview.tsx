@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/service-auth-transport";
 import { createContext, useContext } from "react";
 import { Pressable, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
@@ -47,7 +48,7 @@ export function MediaImagePreview(props: MediaImagePreviewProps) {
   return (
     <ImagePreviewContext value={props}>
       <ImageViewing
-        images={[{ uri: props.source.uri }]}
+        images={[environmentMediaSource(props.source.uri)]}
         imageIndex={0}
         visible
         presentationStyle="fullScreen"

@@ -17,9 +17,6 @@ const mocks = vi.hoisted(() => ({
   readBase64: vi.fn(),
 }));
 
-vi.mock("expo/fetch", () => ({ fetch: vi.fn() }));
-vi.mock("expo", () => ({ requireNativeModule: vi.fn() }));
-
 vi.mock("expo-secure-store", () => ({
   AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
   getItem: () => null,
@@ -265,7 +262,6 @@ describe("prepareTurnAttachments", () => {
               "Content-Type": "image/png",
             }
           : { "Content-Type": "image/png" },
-        ...(sendsHeaders ? { followRedirects: false } : {}),
       }),
     );
   });

@@ -1,6 +1,6 @@
-import { useId, useState } from "react";
-import { Pressable, View } from "react-native";
-import { EnvironmentImage } from "../../components/EnvironmentImage";
+import { environmentMediaSource } from "../../lib/service-auth-transport";
+import { useId, useMemo, useState } from "react";
+import { Image, Pressable, View } from "react-native";
 
 import { FilePreviewLoading } from "./FilePreviewFeedback";
 import { EmptyState } from "../../components/EmptyState";
@@ -18,6 +18,10 @@ function ResolvedWorkspaceFileImagePreview(props: {
   const [preview, setPreview] = useState<FilePreviewSource | null>(null);
   const sourceIdentifier = useId();
   const mediaActions = useMediaActions(props.actionsSource);
+  const imageSource = useMemo(
+    () => ({ ...environmentMediaSource(props.uri), cache: "force-cache" as const }),
+    [props.uri],
+  );
 
   return (
     <View className="relative flex-1 bg-subtle">
@@ -41,10 +45,9 @@ function ResolvedWorkspaceFileImagePreview(props: {
           }
         >
           <PresentationSource identifier={sourceIdentifier} style={{ flex: 1 }}>
-            <EnvironmentImage
+            <Image
               accessible={false}
-              uri={props.uri}
-              onTransportError={() => setLoadError("The image could not be loaded.")}
+              source={imageSource}
               className="h-full w-full"
               resizeMode="contain"
               onLoadStart={() => setLoadError(null)}

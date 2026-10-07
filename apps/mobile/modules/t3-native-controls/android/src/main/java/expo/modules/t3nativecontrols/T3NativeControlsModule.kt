@@ -1,7 +1,5 @@
 package expo.modules.t3nativecontrols
 
-import com.facebook.react.modules.network.CustomClientBuilder
-import com.facebook.react.modules.websocket.WebSocketModule
 import android.content.Intent
 import android.text.format.DateFormat
 import androidx.core.content.FileProvider
@@ -17,12 +15,6 @@ class T3NativeControlsModule : Module() {
   @Suppress("TooGenericExceptionCaught") // Clear the pending promise before rethrowing.
   override fun definition() = ModuleDefinition {
     Name("T3NativeControls")
-    Function("configureEnvironmentWebSocket") {
-      // React Native uses one WebSocket client builder per app.
-      WebSocketModule.setCustomClientBuilder(CustomClientBuilder { builder ->
-        builder.followRedirects(false).followSslRedirects(false)
-      })
-    }
 
     Function("is24HourFormat") {
       val context = appContext.reactContext ?: error("The app is not active.")

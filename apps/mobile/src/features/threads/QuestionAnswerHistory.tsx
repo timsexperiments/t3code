@@ -3,10 +3,7 @@ import type {
   UserInputAttachmentAnswerPayload,
   UserInputAttachments,
 } from "@t3tools/contracts";
-import { Pressable, View } from "react-native";
-import { useState } from "react";
-import { EnvironmentImage } from "../../components/EnvironmentImage";
-import { FilePreviewModal } from "../../components/FilePreviewModal";
+import { Image, Linking, Pressable, View } from "react-native";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import { AppText as Text } from "../../components/AppText";
 import { useAssetUrl } from "../../state/assets";
@@ -15,40 +12,25 @@ function AnswerFile(props: {
   environmentId: EnvironmentId;
   attachment: UserInputAttachments[string][number];
 }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
   const url = useAssetUrl(props.environmentId, {
     _tag: "attachment",
     attachmentId: props.attachment.id,
   });
   return (
-    <View>
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={props.attachment.name}
-        disabled={!url}
-        onPress={() => {
-          if (url) setPreviewOpen(true);
-        }}
-        className="gap-1"
-      >
-        {props.attachment.type === "image" && url ? (
-          <EnvironmentImage uri={url} style={{ width: 160, height: 96 }} resizeMode="contain" />
-        ) : null}
-        <Text className="text-sm text-foreground underline">{props.attachment.name}</Text>
-      </Pressable>
-      <FilePreviewModal
-        source={
-          previewOpen && url
-            ? {
-                kind: props.attachment.type === "image" ? "image" : "document",
-                uri: url,
-                name: props.attachment.name,
-              }
-            : null
-        }
-        onRequestClose={() => setPreviewOpen(false)}
-      />
-    </View>
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={props.attachment.name}
+      disabled={!url}
+      onPress={() => {
+        if (url) void Linking.openURL(url);
+      }}
+      className="gap-1"
+    >
+      {props.attachment.type === "image" && url ? (
+        <Image source={{ uri: url }} style={{ width: 160, height: 96 }} resizeMode="contain" />
+      ) : null}
+      <Text className="text-sm text-foreground underline">{props.attachment.name}</Text>
+    </Pressable>
   );
 }
 

@@ -1,5 +1,5 @@
+import { environmentMediaSource } from "../../lib/service-auth-transport";
 import { ThreadContextDivider } from "./thread-context-divider";
-import { EnvironmentImage } from "../../components/EnvironmentImage";
 import { ThreadHandoffRow } from "./thread-handoff-row";
 import {
   WorktreeWorkingHeader,
@@ -435,14 +435,8 @@ function MessageAttachmentImage(props: {
           })
         }
       >
-        <EnvironmentImage
-          uri={uri}
-          onTransportError={() => {
-            if (!retriedImage.current) {
-              retriedImage.current = true;
-              void refreshAssetUrl();
-            }
-          }}
+        <Image
+          source={environmentMediaSource(uri)}
           className={props.className}
           resizeMode="cover"
           onLoad={() => {
@@ -775,7 +769,7 @@ const MarkdownExternalLink = memo(function MarkdownExternalLink(props: {
         !failedMarkdownFaviconHosts.has(props.host) ? (
         <Image
           source={{
-            uri: faviconUrl,
+            ...environmentMediaSource(faviconUrl),
           }}
           style={[markdownLinkStyles.inlineIcon, markdownLinkStyles.favicon]}
           onError={() => {

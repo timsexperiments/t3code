@@ -5,7 +5,10 @@ import * as Socket from "effect/unstable/socket/Socket";
 import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 
 import { cryptoLayer } from "../features/cloud/dpop";
-import { environmentFetch, makeEnvironmentWebSocketConstructor } from "./environmentTransport";
+import {
+  withEnvironmentServiceAuth,
+  makeEnvironmentServiceAuthWebSocketConstructor,
+} from "./service-auth-transport";
 import { managedRelayClientLayer } from "../features/cloud/managedRelayLayer";
 import { resolveCloudPublicConfig } from "../features/cloud/publicConfig";
 import { tracingLayer } from "../features/observability/tracing";
@@ -18,10 +21,10 @@ function configuredRelayUrl(): string {
   return resolveCloudPublicConfig().relay.url ?? "http://relay.invalid";
 }
 
-const httpClientLayer = remoteHttpClientLayer(environmentFetch);
+const httpClientLayer = remoteHttpClientLayer(withEnvironmentServiceAuth(fetch));
 const webSocketConstructorLayer = Layer.succeed(
   Socket.WebSocketConstructor,
-  makeEnvironmentWebSocketConstructor(),
+  makeEnvironmentServiceAuthWebSocketConstructor(),
 );
 
 type RuntimeLayerSource =

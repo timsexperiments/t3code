@@ -1,7 +1,8 @@
+import { environmentMediaSource } from "../../lib/service-auth-transport";
 import { type StaticScreenProps, useNavigation } from "@react-navigation/native";
 import { useAtomValue } from "@effect/atom-react";
 import type { ChatAttachment, EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
-import { EnvironmentExpoImage } from "../../components/EnvironmentImage";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, View } from "react-native";
@@ -567,8 +568,8 @@ function QueueAttachmentThumbnail(props: {
     return <View className="h-6 w-6 rounded bg-subtle" />;
   }
   return (
-    <EnvironmentExpoImage
-      uri={url}
+    <Image
+      source={environmentMediaSource(url)}
       contentFit="cover"
       style={{ width: 24, height: 24, borderRadius: 4 }}
       accessibilityIgnoresInvertColors

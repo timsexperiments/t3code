@@ -27,8 +27,7 @@ export function withEnvironmentServiceAuth(
     for (const [name, value] of Object.entries(serviceHeaders)) {
       mergedHeaders.set(name, value);
     }
-    // Redirects can forward custom headers to another origin.
-    return fetchFn(input, { ...init, headers: mergedHeaders, redirect: "manual" });
+    return fetchFn(input, { ...init, headers: mergedHeaders });
   };
 }
 
@@ -53,4 +52,13 @@ export function makeEnvironmentServiceAuthWebSocketConstructor(
 
     return new WebSocketImpl(url, protocols, headers ? { headers } : undefined);
   };
+}
+
+export function serviceAuthRequestOptions(uri: string) {
+  const headers = serviceAuthHeadersForUrl(uri);
+  return headers === null ? {} : { headers };
+}
+
+export function environmentMediaSource(uri: string) {
+  return { uri, ...serviceAuthRequestOptions(uri) };
 }

@@ -1,6 +1,7 @@
+import { environmentMediaSource } from "../lib/service-auth-transport";
 import type { ComposerContextRecord, EnvironmentId } from "@t3tools/contracts";
 import { Alert, Pressable, View } from "react-native";
-import { EnvironmentExpoImage } from "./EnvironmentImage";
+import { Image } from "expo-image";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { DraftComposerAttachment } from "../lib/composerImages";
 import { composerAttachmentInlineUri, isFileBackedComposerAttachment } from "../lib/composerImages";
@@ -97,8 +98,8 @@ export function ComposerContextAttachment(props: {
           accessibilityLabel={`Preview ${record.name}`}
           onPress={() => setPreviewOpen(true)}
         >
-          <EnvironmentExpoImage
-            uri={uri}
+          <Image
+            source={environmentMediaSource(uri)}
             style={{ width: "100%", height: 280 }}
             contentFit="contain"
             accessibilityLabel={record.name}

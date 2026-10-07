@@ -1,5 +1,6 @@
+import { environmentMediaSource } from "../../lib/service-auth-transport";
 import type { ChatAttachment, EnvironmentId } from "@t3tools/contracts";
-import { EnvironmentExpoImage } from "../../components/EnvironmentImage";
+import { Image } from "expo-image";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { AppText as Text } from "../../components/AppText";
@@ -91,8 +92,8 @@ function QueuedEditAttachmentChip(props: {
   return (
     <View className="max-w-[180px] flex-row items-center gap-2 rounded-xl border border-border bg-card py-1 pl-1 pr-2">
       {isImage && url !== null ? (
-        <EnvironmentExpoImage
-          uri={url}
+        <Image
+          source={environmentMediaSource(url)}
           contentFit="cover"
           style={{ width: 24, height: 24, borderRadius: 6 }}
           accessibilityIgnoresInvertColors

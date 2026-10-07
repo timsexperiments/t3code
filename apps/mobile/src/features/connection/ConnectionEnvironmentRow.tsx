@@ -1,6 +1,6 @@
 import { ConnectionTraceId } from "./ConnectionTraceId";
 import { SymbolView } from "../../components/AppSymbol";
-import { connectionStatusTitle } from "@t3tools/client-runtime/connection";
+import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
@@ -12,7 +12,6 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 
 import { AppText as Text } from "../../components/AppText";
 import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
-import { ErrorBanner } from "../../components/ErrorBanner";
 import { MaterialButton } from "../../components/MaterialButton";
 import { MaterialIconButton } from "../../components/MaterialIconButton";
 import { ThemedSwitch } from "../../components/ThemedSwitch";
@@ -33,7 +32,7 @@ function connectionStatusLabel(environment: ConnectedEnvironmentSummary): string
   if (!environment.isEnabled && environment.connectionState !== "unsupported") {
     return "Off";
   }
-  return connectionStatusTitle({
+  return connectionStatusText({
     phase: environment.connectionState,
     error: environment.connectionError,
     traceId: environment.connectionErrorTraceId,
@@ -55,7 +54,6 @@ export function ConnectionEnvironmentRow(props: {
 }) {
   const [label, setLabel] = useState(props.environment.environmentLabel);
   const [url, setUrl] = useState(props.environment.displayUrl);
-  const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [serviceAuth, setServiceAuth] = useState<EnvironmentServiceAuthDraft>(() =>
     serviceAuthDraftFromStored(serviceAuthForUrl(props.environment.displayUrl)),
   );
@@ -151,9 +149,17 @@ export function ConnectionEnvironmentRow(props: {
                 "text-xs",
                 hasConnectionFailure ? "text-danger-foreground" : "text-foreground-muted",
               )}
-              numberOfLines={1}
+              numberOfLines={props.expanded ? undefined : 1}
+              selectable={props.expanded}
             >
               {statusLabel}
+              {statusTraceId ? (
+                <ConnectionTraceId
+                  traceId={statusTraceId}
+                  tone={hasConnectionFailure ? "danger" : "muted"}
+                  activation="longPress"
+                />
+              ) : null}
             </Text>
           ) : null}
         </View>
@@ -181,37 +187,6 @@ export function ConnectionEnvironmentRow(props: {
           exiting={FadeOut.duration(150)}
           className="gap-3 px-4 pb-4"
         >
-          {hasConnectionFailure ? (
-            <ErrorBanner message="Could not connect">
-              <Text className="text-sm leading-normal text-foreground">
-                {props.environment.isRelayManaged
-                  ? "Check that the environment is online and T3 Connect is running."
-                  : "Check the server URL and any service authentication headers."}
-                {isRetrying ? " The app will keep retrying automatically." : ""}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: showErrorDetails }}
-                className="min-h-[44px] flex-row items-center gap-1.5 active:opacity-70"
-                onPress={() => setShowErrorDetails((previous) => !previous)}
-              >
-                <Text className="text-xs font-t3-bold text-danger-foreground">
-                  {showErrorDetails ? "Hide technical details" : "Show technical details"}
-                </Text>
-                <SymbolView
-                  name={showErrorDetails ? "chevron.up" : "chevron.down"}
-                  size={10}
-                  tintColorClassName="accent-danger-foreground"
-                />
-              </Pressable>
-              {showErrorDetails ? (
-                <Text className="text-xs leading-normal text-foreground-muted" selectable>
-                  {props.environment.connectionError}
-                  {statusTraceId ? <ConnectionTraceId traceId={statusTraceId} /> : null}
-                </Text>
-              ) : null}
-            </ErrorBanner>
-          ) : null}
           {props.environment.isRelayManaged ? (
             <Text className="text-sm text-foreground-muted">
               Managed by T3 Connect. Tunnel details update automatically.

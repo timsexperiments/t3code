@@ -64,16 +64,11 @@ another link to share.
 
 ### Connect through an authentication proxy
 
-On mobile, use **Service authentication → Custom** when adding a direct HTTPS
-environment. Enter the header names and values required by your proxy. For a saved
-connection, open **Settings → Environments**, select the environment, and choose
-**Edit**. Choose **None** to remove the headers.
-
-Credentials stay on this device and apply only to the configured HTTPS origin,
-including its port. Authenticated requests do not follow redirects. Use the
-server's final HTTPS URL and pair with T3 Code as usual.
-
-Videos from authenticated environments download before playback starts.
+On mobile, choose **Service authentication → Custom** when adding a direct HTTPS
+environment and enter the headers required by your proxy. Edit them under
+**Settings → Environments → Edit**. Choose **None** to remove them.
+Values stay in secure storage on this device and apply only to the configured
+HTTPS origin, including its port. Pair with T3 Code as usual.
 
 ### Reach one machine several ways
 

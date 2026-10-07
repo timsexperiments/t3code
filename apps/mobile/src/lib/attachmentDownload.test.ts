@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   directories: new Set<string>(),
   deleted: vi.fn(),
   download: vi.fn(),
-  fetch: vi.fn<typeof fetch>(),
   copy: vi.fn(),
   share: vi.fn(),
   shareFromSource: vi.fn(),
@@ -13,7 +12,6 @@ const mocks = vi.hoisted(() => ({
   uuid: vi.fn(),
 }));
 
-vi.mock("expo/fetch", () => ({ fetch: mocks.fetch }));
 vi.mock("expo-secure-store", () => ({
   AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
   getItem: () => null,
@@ -61,11 +59,6 @@ vi.mock("expo-file-system", () => {
       this.uri = typeof source === "string" ? source : `${source.uri}/${encodeURIComponent(name!)}`;
     }
 
-    create() {}
-    writableStream() {
-      return new WritableStream<Uint8Array>();
-    }
-
     async copy(destination: File): Promise<void> {
       await mocks.copy(this.uri, destination.uri);
     }
@@ -91,8 +84,6 @@ import {
   shareLocalAttachment,
 } from "./attachmentDownload";
 import { isForegroundHandoffActive } from "./foreground-handoff";
-
-import { acquireEnvironmentMedia } from "./environmentMedia";
 import {
   clearServiceAuthDocumentForTests,
   makeCustomHeadersServiceAuth,
@@ -109,7 +100,6 @@ const input = {
 
 beforeEach(() => {
   clearServiceAuthDocumentForTests();
-  mocks.fetch.mockReset();
   mocks.open.mockReset();
   mocks.open.mockResolvedValue(undefined);
   mocks.directories.clear();
@@ -138,6 +128,27 @@ afterEach(() => {
 });
 
 describe("downloadAndShareAttachment", () => {
+  it("adds saved headers only to downloads from the configured origin", async () => {
+    await setServiceAuthForUrl(
+      input.url,
+      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "test-token" }]),
+    );
+    const signal = new AbortController().signal;
+    await downloadAndShareAttachment({ ...input, signal });
+    await downloadAndShareAttachment({ ...input, url: "https://other.example/report.pdf", signal });
+    await downloadAndShareAttachment({
+      ...input,
+      url: "https://chosen-environment.example:8443/report.pdf",
+      signal,
+    });
+    expect(mocks.download.mock.calls[0]?.[2]).toEqual({
+      signal,
+      headers: { "X-Service-Token": "test-token" },
+    });
+    expect(mocks.download.mock.calls[1]?.[2]).toEqual({ signal });
+    expect(mocks.download.mock.calls[2]?.[2]).toEqual({ signal });
+  });
+
   it("downloads the chosen environment's signed URL and shares the local file", async () => {
     const controller = new AbortController();
     await downloadAndShareAttachment({ ...input, signal: controller.signal });
@@ -450,43 +461,5 @@ describe("document viewer handoff", () => {
     expect(mocks.download).toHaveBeenCalledTimes(1);
     expect(mocks.deleted).toHaveBeenCalledTimes(1);
     expect(isForegroundHandoffActive()).toBe(false);
-  });
-});
-
-describe("authenticated media previews", () => {
-  async function credentials(value = "synthetic") {
-    await setServiceAuthForUrl(
-      input.url,
-      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value }]),
-    );
-  }
-
-  it("uses temporary attachment files and reauthorizes each preview", async () => {
-    await credentials();
-    mocks.fetch.mockImplementation(async () => new Response(new Uint8Array([1, 2, 3])));
-    const first = await acquireEnvironmentMedia(input.url, new AbortController().signal);
-    expect(first?.uri).toMatch(/^file:\/\/\/cache\/.+\/report.pdf$/);
-    first?.dispose();
-    expect([...mocks.directories]).toEqual([CACHE]);
-    await credentials("replacement");
-    const second = await acquireEnvironmentMedia(input.url, new AbortController().signal);
-    expect(second?.uri).not.toBe(first?.uri);
-    const init = mocks.fetch.mock.calls[1]?.[1];
-    expect(new Headers(init?.headers).get("X-Service-Token")).toBe("replacement");
-    expect(init?.redirect).toBe("manual");
-    second?.dispose();
-    expect([...mocks.directories]).toEqual([CACHE]);
-    expect(mocks.download).not.toHaveBeenCalled();
-  });
-
-  it("removes the temporary directory after cancellation", async () => {
-    await credentials();
-    const controller = new AbortController();
-    mocks.fetch.mockImplementation(async () => {
-      controller.abort();
-      throw new Error("Cancelled");
-    });
-    expect(await acquireEnvironmentMedia(input.url, controller.signal)).toBeNull();
-    expect([...mocks.directories]).toEqual([CACHE]);
   });
 });

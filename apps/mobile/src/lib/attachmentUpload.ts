@@ -1,3 +1,4 @@
+import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import {
   clampFileAttachmentUploadBytes,
@@ -16,7 +17,6 @@ import type {
 import { PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 
-import { uploadEnvironmentFile } from "./environmentTransport";
 import { appAtomRegistry } from "../state/atom-registry";
 import { assetEnvironment } from "../state/assets";
 import { attachmentEnvironment } from "../state/attachments";
@@ -261,7 +261,7 @@ async function uploadFileBytes(
   signal: AbortSignal,
   onProgress?: (progress: number) => void,
 ): Promise<void> {
-  const { File, Paths } = await import("expo-file-system");
+  const { File, Paths, UploadType } = await import("expo-file-system");
   if (signal.aborted) throw new Error("Upload cancelled.");
   // Legacy image drafts persisted inline bytes and stage them in a temp cache
   // file for the native uploader. Everything else uploads its owned copy.
@@ -281,12 +281,21 @@ async function uploadFileBytes(
         encoding: "base64",
       });
     }
-    const result = await uploadEnvironmentFile({
-      file,
-      url,
-      contentType: composerAttachmentWireMimeType(attachment),
+    const result = await file.upload(url, {
+      httpMethod: "POST",
+      uploadType: UploadType.BINARY_CONTENT,
+      headers: {
+        ...serviceAuthHeadersForUrl(url),
+        "Content-Type": composerAttachmentWireMimeType(attachment),
+      },
       signal,
-      onProgress,
+      ...(onProgress
+        ? {
+            onProgress: ({ bytesSent, totalBytes }) => {
+              if (totalBytes > 0) onProgress(bytesSent / totalBytes);
+            },
+          }
+        : {}),
     });
     if (result.status < 200 || result.status >= 300) {
       throw new Error(`Upload failed for '${attachment.name}' (${result.status}).`);

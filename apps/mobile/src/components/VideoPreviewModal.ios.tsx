@@ -1,10 +1,10 @@
+import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
 import { useIsFocused } from "@react-navigation/native";
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId, useState } from "react";
 import { Alert, Keyboard } from "react-native";
 
 import { loadLocalAttachmentPreview } from "../lib/localAttachmentPreview";
-import { acquireEnvironmentMedia } from "../lib/environmentMedia";
 import { mediaVideoPreviewUri, type VideoPreviewSource } from "../lib/videoPreviewSource";
 import { useAssetUrlState, useRefreshAssetUrl } from "../state/assets";
 import { usePreparedConnection } from "../state/session";
@@ -17,6 +17,7 @@ const NativeControls = requireNativeModule<{
     title: string,
     sourceIdentifier: string,
     identifier: string,
+    headers: Readonly<Record<string, string>>,
   ): Promise<void>;
   dismissVideo(identifier: string): Promise<void>;
 }>("T3NativeControls");
@@ -69,16 +70,17 @@ function NativeVideoPreview(props: {
       const file =
         localAttachment !== null
           ? await loadLocalAttachmentPreview(localAttachment, controller.signal)
-          : await acquireEnvironmentMedia(playbackUrl!, controller.signal);
-      if (!file) return;
+          : null;
+      if (localAttachment !== null && !file) return;
       try {
         if (controller.signal.aborted) return;
         ready = true;
         await NativeControls.presentVideo(
-          file.uri,
+          file?.uri ?? playbackUrl!,
           name,
           source.sourceIdentifier ?? "",
           identifier,
+          serviceAuthHeadersForUrl(file?.uri ?? playbackUrl!) ?? {},
         );
         if (!controller.signal.aborted) onRequestClose();
       } finally {

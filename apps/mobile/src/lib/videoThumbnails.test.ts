@@ -1,8 +1,8 @@
+vi.mock("expo-secure-store", () => ({ getItem: () => null }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({ createPlayer: vi.fn() }));
 vi.mock("expo-video", () => ({ createVideoPlayer: mocks.createPlayer }));
-vi.mock("expo-secure-store", () => ({ getItem: () => null }));
 
 let thumbnails: typeof import("./videoThumbnails");
 const frame = { width: 480, height: 270 };
