@@ -91,7 +91,7 @@ export function EnvironmentServiceAuthFields(props: {
                 label="Header name"
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder="Authorization"
+                placeholder="X-Auth-Token"
                 value={header.name}
                 onChangeText={(value) => updateCustomHeader(index, "name", value)}
               />

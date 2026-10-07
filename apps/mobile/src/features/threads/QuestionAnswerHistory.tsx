@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/service-auth-transport";
 import type {
   EnvironmentId,
   UserInputAttachmentAnswerPayload,
@@ -27,7 +28,11 @@ function AnswerFile(props: {
       className="gap-1"
     >
       {props.attachment.type === "image" && url ? (
-        <Image source={{ uri: url }} style={{ width: 160, height: 96 }} resizeMode="contain" />
+        <Image
+          source={environmentMediaSource(url)}
+          style={{ width: 160, height: 96 }}
+          resizeMode="contain"
+        />
       ) : null}
       <Text className="text-sm text-foreground underline">{props.attachment.name}</Text>
     </Pressable>

@@ -4,6 +4,8 @@ import * as SecureStore from "expo-secure-store";
 const SERVICE_AUTH_STORAGE_KEY = "t3code.environment-service-auth.v1";
 
 const FORBIDDEN_HEADER_NAMES = new Set([
+  "authorization",
+  "dpop",
   "connection",
   "content-length",
   "cookie",
@@ -90,10 +92,9 @@ export function makeCustomHeadersServiceAuth(
     if (!header.value.trim()) {
       throw new Error(`Enter a value for the ${name} service-auth header.`);
     }
-    // oxlint-disable-next-line no-control-regex -- HTTP header values cannot contain these bytes.
-    if (/[\u0000-\u0008\u000a-\u001f\u007f]/.test(header.value)) {
+    if (/[^\t\x20-\x7e]/.test(header.value)) {
       throw new Error(
-        `The ${name} service-auth header contains a line break or control character.`,
+        `The ${name} service-auth header must contain only ASCII characters without line breaks.`,
       );
     }
     return new ServiceAuthHeader({ name, value: header.value });
@@ -114,7 +115,11 @@ export function normalizeServiceAuthOrigin(input: string): string {
 }
 
 function headersForAuth(auth: EnvironmentServiceAuth): Readonly<Record<string, string>> {
-  return Object.fromEntries(auth.headers.map((header) => [header.name, header.value]));
+  return Object.fromEntries(
+    auth.headers
+      .filter((header) => !FORBIDDEN_HEADER_NAMES.has(header.name.toLowerCase()))
+      .map((header) => [header.name, header.value]),
+  );
 }
 
 export function serviceAuthForUrl(input: string): EnvironmentServiceAuth | null {

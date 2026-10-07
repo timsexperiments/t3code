@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { PROJECT_FAVICON_MAX_DATA_URL_LENGTH } from "@t3tools/client-runtime/project-favicon-cache";
 
 const native = vi.hoisted(() => ({
-  load: vi.fn(async (_url: string, options: { maxWidth: number; maxHeight: number }) => ({
+  load: vi.fn(async (_url: unknown, options: { maxWidth: number; maxHeight: number }) => ({
     width: options.maxWidth,
     height: options.maxHeight,
     release: vi.fn(),
@@ -11,6 +11,11 @@ const native = vi.hoisted(() => ({
   path: vi.fn(async () => "/cache/thumbnail"),
   read: vi.fn(),
   remove: vi.fn(),
+}));
+vi.mock("expo-secure-store", () => ({
+  getItem: () => null,
+  setItemAsync: async () => undefined,
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
 }));
 vi.mock("expo-image", () => ({
   Image: {

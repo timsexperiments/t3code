@@ -33,45 +33,85 @@ describe("environment service authentication", () => {
     clearServiceAuthDocumentForTests();
   });
 
-  it("normalizes secure HTTP and WebSocket URLs to the same exact origin", () => {
-    expect(normalizeServiceAuthOrigin("https://T3CODE.example.test/path")).toBe(
-      "https://t3code.example.test",
-    );
-    expect(normalizeServiceAuthOrigin("wss://t3code.example.test/rpc")).toBe(
-      "https://t3code.example.test",
-    );
-    expect(() => normalizeServiceAuthOrigin("http://t3code.example.test")).toThrow(
-      "requires an HTTPS environment URL",
-    );
+  it("keeps credentials isolated by HTTPS origin and port", async () => {
+    const first = makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "first" }]);
+    const second = makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "second" }]);
+    const port = makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "port" }]);
+    await setServiceAuthForUrl("https://first.example", first);
+    await setServiceAuthForUrl("https://second.example", second);
+    await setServiceAuthForUrl("https://first.example:8443", port);
+
+    for (const [url, token] of [
+      ["https://first.example/api", "first"],
+      ["wss://FIRST.example:443/rpc", "first"],
+      ["https://second.example/api", "second"],
+      ["https://first.example:8443/assets", "port"],
+      ["https://first.example:444/assets", null],
+      ["https://other.example/api", null],
+      ["https://first.example.evil/api", null],
+      ["http://first.example/api", null],
+      ["ws://first.example/rpc", null],
+      ["file:///first.example/image.png", null],
+      ["not a URL", null],
+    ] as const) {
+      expect(serviceAuthHeadersForUrl(url), url).toEqual(
+        token === null ? null : { "X-Service-Token": token },
+      );
+    }
+    expect(() => normalizeServiceAuthOrigin("http://first.example")).toThrow("requires an HTTPS");
   });
 
-  it("stores custom credentials and resolves them only for the matching origin", async () => {
-    await setServiceAuthForUrl(
-      "https://t3code.example.test",
-      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "service-token" }]),
-    );
+  it("rejects authentication and transport-owned headers", () => {
+    for (const name of [
+      "Authorization",
+      "authorization",
+      "DPoP",
+      "dpop",
+      "Host",
+      "Sec-WebSocket-Key",
+    ]) {
+      expect(() => makeCustomHeadersServiceAuth([{ name, value: "token" }]), name).toThrow(
+        "cannot be configured",
+      );
+    }
+  });
 
-    expect(serviceAuthHeadersForUrl("wss://t3code.example.test/rpc")).toEqual({
+  it("ignores reserved authentication headers saved by older builds", async () => {
+    secureValues.set(
+      "t3code.environment-service-auth.v1",
+      JSON.stringify({
+        schemaVersion: 1,
+        entries: [
+          {
+            origin: "https://legacy.example",
+            auth: {
+              _tag: "CustomHeadersServiceAuth",
+              headers: [
+                { name: "Authorization", value: "old-token" },
+                { name: "DPoP", value: "old-proof" },
+                { name: "X-Service-Token", value: "service-token" },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    vi.resetModules();
+    const stored = await import("./environment-service-auth");
+    expect(stored.serviceAuthHeadersForUrl("https://legacy.example/api")).toEqual({
       "X-Service-Token": "service-token",
     });
-    expect(serviceAuthHeadersForUrl("https://other.example.test/rpc")).toBeNull();
   });
 
-  it("supports custom headers while rejecting transport-owned headers", async () => {
-    await setServiceAuthForUrl(
-      "https://t3code.example.test",
+  it("rejects duplicate and malformed header names", () => {
+    expect(() =>
       makeCustomHeadersServiceAuth([
-        { name: "Authorization", value: "Bearer service-token" },
-        { name: "X-Remote-User", value: "mobile" },
+        { name: "X-Service-Token", value: "first" },
+        { name: "x-service-token", value: "second" },
       ]),
-    );
-
-    expect(serviceAuthHeadersForUrl("https://t3code.example.test/api")).toEqual({
-      Authorization: "Bearer service-token",
-      "X-Remote-User": "mobile",
-    });
-    expect(() => makeCustomHeadersServiceAuth([{ name: "Host", value: "wrong.test" }])).toThrow(
-      "cannot be configured",
+    ).toThrow("more than once");
+    expect(() => makeCustomHeadersServiceAuth([{ name: "Invalid Name", value: "token" }])).toThrow(
+      "Invalid service-auth header name",
     );
   });
 
@@ -121,7 +161,7 @@ describe("environment service authentication", () => {
     expect(serviceAuthForUrl("https://second.example")).toEqual(auth);
   });
 
-  it.each(["value\r\nX-Injected: yes", "value\n", "\u0000", "\u007f", "   "])(
+  it.each(["value\r\nX-Injected: yes", "value\n", "\u0000", "\u007f", "   ", "tökén", "🔑"])(
     "rejects invalid values before they reach a native transport",
     (value) => {
       expect(() => makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value }])).toThrow();

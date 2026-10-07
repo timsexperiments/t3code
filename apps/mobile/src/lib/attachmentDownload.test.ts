@@ -128,25 +128,17 @@ afterEach(() => {
 });
 
 describe("downloadAndShareAttachment", () => {
-  it("adds saved headers only to downloads from the configured origin", async () => {
+  it("passes saved headers and cancellation to native downloads", async () => {
     await setServiceAuthForUrl(
       input.url,
       makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "test-token" }]),
     );
     const signal = new AbortController().signal;
     await downloadAndShareAttachment({ ...input, signal });
-    await downloadAndShareAttachment({ ...input, url: "https://other.example/report.pdf", signal });
-    await downloadAndShareAttachment({
-      ...input,
-      url: "https://chosen-environment.example:8443/report.pdf",
-      signal,
-    });
     expect(mocks.download.mock.calls[0]?.[2]).toEqual({
       signal,
       headers: { "X-Service-Token": "test-token" },
     });
-    expect(mocks.download.mock.calls[1]?.[2]).toEqual({ signal });
-    expect(mocks.download.mock.calls[2]?.[2]).toEqual({ signal });
   });
 
   it("downloads the chosen environment's signed URL and shares the local file", async () => {

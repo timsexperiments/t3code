@@ -21,7 +21,7 @@ import { relayEnvironmentDiscovery } from "../../state/relay";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { relayManagedEnvironmentIds } from "./environmentSections";
 import { removeServiceAuthForUrl } from "../../persistence/environment-service-auth";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 
 export interface RelayEnvironmentView {
   readonly environment: RelayClientEnvironmentRecord;
@@ -101,7 +101,7 @@ export function useConnectionController() {
         environment !== undefined &&
         !environment.isRelayManaged
       ) {
-        await removeServiceAuthForUrl(environment.displayUrl);
+        await removeServiceAuthForUrl(environment.displayUrl).catch(() => undefined);
       }
       return result;
     },

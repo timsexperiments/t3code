@@ -1,4 +1,4 @@
-import * as Socket from "effect/unstable/socket/Socket";
+import * as Socket from "effect/socket/Socket";
 
 import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
 

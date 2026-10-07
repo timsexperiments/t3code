@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
+import { beforeEach, vi } from "vite-plus/test";
 import * as Effect from "effect/Effect";
-import { HttpClient } from "effect/unstable/http";
-import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
+import { HttpClient } from "effect/http";
+import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
 
 vi.mock("expo-secure-store", () => ({
   AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
@@ -20,18 +20,10 @@ import {
   setServiceAuthForUrl,
 } from "../persistence/environment-service-auth";
 
-const resolveHeaders = (url: string) =>
-  new URL(url).hostname === "t3code.example.test"
-    ? {
-        "X-Service-Id": "service-client-id",
-        "X-Service-Token": "service-client-secret",
-      }
-    : null;
-
 describe("environment service-auth transport", () => {
+  beforeEach(() => clearServiceAuthDocumentForTests());
   it.effect("sends saved headers on discovery through the environment HTTP client", () =>
     Effect.gen(function* () {
-      clearServiceAuthDocumentForTests();
       yield* Effect.promise(() =>
         setServiceAuthForUrl(
           "https://t3code.example.test/",
@@ -43,53 +35,72 @@ describe("environment service-auth transport", () => {
       );
       const fetchFn = vi.fn<typeof fetch>(() => Promise.resolve(new Response("{}")));
       yield* HttpClient.get("https://t3code.example.test/.well-known/t3/environment").pipe(
-        Effect.provide(remoteHttpClientLayer(withEnvironmentServiceAuth(fetchFn))),
+        Effect.provide(layerRemoteHttpClient(withEnvironmentServiceAuth(fetchFn))),
       );
       const headers = new Headers(fetchFn.mock.calls[0]?.[1]?.headers);
       expect(headers.get("X-Service-Id")).toBe("service-client-id");
       expect(headers.get("X-Service-Token")).toBe("service-client-secret");
-      clearServiceAuthDocumentForTests();
     }),
   );
 
-  it("adds service headers only to the configured HTTP origin", async () => {
-    const fetchFn = vi.fn<typeof fetch>(() => Promise.resolve(new Response()));
-    const wrapped = withEnvironmentServiceAuth(fetchFn, resolveHeaders);
-
-    await wrapped("https://t3code.example.test/api/environments", {
-      headers: { Accept: "application/json" },
-      redirect: "follow",
-    });
-    await wrapped("https://other.example.test/api/environments");
-
-    const protectedInit = fetchFn.mock.calls[0]?.[1];
-    expect(protectedInit?.redirect).toBe("follow");
-    expect(new Headers(protectedInit?.headers).get("Accept")).toBe("application/json");
-    expect(new Headers(protectedInit?.headers).get("X-Service-Id")).toBe("service-client-id");
-    expect(new Headers(protectedInit?.headers).get("X-Service-Token")).toBe(
-      "service-client-secret",
+  it("preserves T3 authentication and request options when adding service headers", async () => {
+    await setServiceAuthForUrl(
+      "https://t3code.example.test",
+      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "service-secret" }]),
     );
-    expect(fetchFn.mock.calls[1]).toEqual([
-      "https://other.example.test/api/environments",
-      undefined,
-    ]);
+    const fetchFn = vi.fn<typeof fetch>(() => Promise.resolve(new Response()));
+    const wrapped = withEnvironmentServiceAuth(fetchFn);
+    const signal = new AbortController().signal;
+    const options = {
+      headers: { Authorization: "Bearer t3-token", DPoP: "t3-proof" },
+      signal,
+      redirect: "follow",
+    } satisfies RequestInit;
+    for (const input of [
+      "https://t3code.example.test/api/auth/websocket-ticket",
+      new URL("https://t3code.example.test/api/auth/websocket-ticket"),
+      new Request("https://t3code.example.test/api/auth/websocket-ticket", {
+        headers: { Accept: "application/json" },
+      }),
+    ]) {
+      await wrapped(input, options);
+      const init = fetchFn.mock.calls.at(-1)?.[1];
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer t3-token");
+      expect(headers.get("DPoP")).toBe("t3-proof");
+      expect(headers.get("X-Service-Token")).toBe("service-secret");
+      expect(init?.signal).toBe(signal);
+      expect(init?.redirect).toBe("follow");
+    }
+    expect(new Headers(fetchFn.mock.calls.at(-1)?.[1]?.headers).get("Accept")).toBe(
+      "application/json",
+    );
+    await wrapped("https://other.example.test/api", options);
+    expect(fetchFn.mock.calls.at(-1)?.[1]).toBe(options);
   });
 
-  it("adds service headers to the configured WebSocket origin", () => {
+  it("adds saved headers to WebSockets while preserving supplied headers and protocols", async () => {
+    await setServiceAuthForUrl(
+      "https://t3code.example.test",
+      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "service-secret" }]),
+    );
     const constructor = vi.fn(function FakeWebSocket() {});
     const makeWebSocket = makeEnvironmentServiceAuthWebSocketConstructor(
-      resolveHeaders,
+      undefined,
       constructor as never,
     );
 
     makeWebSocket("wss://t3code.example.test/rpc", "t3-code");
     makeWebSocket("wss://other.example.test/rpc", "t3-code");
+    makeWebSocket("wss://t3code.example.test/rpc", { headers: { "X-T3-Client": "mobile" } });
 
     expect(constructor).toHaveBeenNthCalledWith(1, "wss://t3code.example.test/rpc", "t3-code", {
       headers: {
-        "X-Service-Id": "service-client-id",
-        "X-Service-Token": "service-client-secret",
+        "X-Service-Token": "service-secret",
       },
+    });
+    expect(constructor).toHaveBeenNthCalledWith(3, "wss://t3code.example.test/rpc", undefined, {
+      headers: { "X-T3-Client": "mobile", "X-Service-Token": "service-secret" },
     });
     expect(constructor).toHaveBeenNthCalledWith(
       2,
