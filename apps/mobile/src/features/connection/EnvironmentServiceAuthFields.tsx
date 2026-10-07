@@ -2,7 +2,7 @@ import { Pressable, View } from "react-native";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text } from "../../components/AppText";
-import { cn } from "../../lib/cn";
+import { SegmentedControl } from "../../components/SegmentedControl";
 import { ConnectionFormField } from "./ConnectionFormField";
 import {
   makeCustomHeadersServiceAuth,
@@ -26,54 +26,29 @@ export function serviceAuthDraftFromStored(
   if (auth === null) {
     return EMPTY_SERVICE_AUTH_DRAFT;
   }
-  switch (auth._tag) {
-    case "CustomHeadersServiceAuth":
-      return {
-        kind: "custom-headers",
-        headers: auth.headers.map((header) => ({ name: header.name, value: header.value })),
-      };
-  }
+  return { kind: "custom-headers", headers: auth.headers };
 }
 
 export function serviceAuthFromDraft(
   draft: EnvironmentServiceAuthDraft,
 ): EnvironmentServiceAuth | null {
-  switch (draft.kind) {
-    case "none":
-      return null;
-    case "custom-headers":
-      return makeCustomHeadersServiceAuth(draft.headers);
-  }
+  return draft.kind === "none" ? null : makeCustomHeadersServiceAuth(draft.headers);
 }
 
-const AUTH_OPTIONS: ReadonlyArray<{
-  readonly kind: EnvironmentServiceAuthDraft["kind"];
-  readonly label: string;
-}> = [
-  { kind: "none", label: "None" },
-  { kind: "custom-headers", label: "Custom" },
-];
-
-function draftForKind(kind: EnvironmentServiceAuthDraft["kind"]): EnvironmentServiceAuthDraft {
-  switch (kind) {
-    case "none":
-      return EMPTY_SERVICE_AUTH_DRAFT;
-    case "custom-headers":
-      return { kind, headers: [{ name: "", value: "" }] };
-  }
-}
+const AUTH_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "custom-headers", label: "Custom" },
+] satisfies ReadonlyArray<{ value: EnvironmentServiceAuthDraft["kind"]; label: string }>;
 
 export function EnvironmentServiceAuthFields(props: {
   readonly value: EnvironmentServiceAuthDraft;
   readonly onChange: (value: EnvironmentServiceAuthDraft) => void;
 }) {
+  const headers = props.value.kind === "custom-headers" ? props.value.headers : [];
   const updateCustomHeader = (index: number, field: "name" | "value", value: string): void => {
-    if (props.value.kind !== "custom-headers") {
-      return;
-    }
     props.onChange({
       kind: "custom-headers",
-      headers: props.value.headers.map((header, candidateIndex) =>
+      headers: headers.map((header, candidateIndex) =>
         candidateIndex === index ? { ...header, [field]: value } : header,
       ),
     });
@@ -85,32 +60,20 @@ export function EnvironmentServiceAuthFields(props: {
         <Text className="text-2xs font-t3-bold tracking-[0.8px] uppercase text-foreground-muted">
           Service authentication
         </Text>
-        <View className="flex-row gap-2">
-          {AUTH_OPTIONS.map((option) => {
-            const selected = props.value.kind === option.kind;
-            return (
-              <Pressable
-                key={option.kind}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                className={cn(
-                  "min-h-[40px] flex-1 items-center justify-center rounded-[12px] border px-2 py-2 active:opacity-70",
-                  selected ? "border-primary bg-primary" : "border-input-border bg-input",
-                )}
-                onPress={() => props.onChange(draftForKind(option.kind))}
-              >
-                <Text
-                  className={cn(
-                    "text-xs font-t3-bold",
-                    selected ? "text-primary-foreground" : "text-foreground",
-                  )}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <SegmentedControl
+          options={AUTH_OPTIONS}
+          selected={props.value.kind}
+          onSelect={(kind) =>
+            props.onChange(
+              kind === "none"
+                ? EMPTY_SERVICE_AUTH_DRAFT
+                : {
+                    kind,
+                    headers: [{ name: "", value: "" }],
+                  },
+            )
+          }
+        />
       </View>
 
       {props.value.kind === "custom-headers" ? (
@@ -119,7 +82,7 @@ export function EnvironmentServiceAuthFields(props: {
             Sends headers only to this environment's HTTPS origin. Stores values securely on this
             device.
           </Text>
-          {props.value.headers.map((header, index) => (
+          {headers.map((header, index) => (
             <View
               key={`service-header-${String(index)}`}
               className="gap-2 rounded-[14px] bg-subtle p-3"
@@ -146,15 +109,12 @@ export function EnvironmentServiceAuthFields(props: {
                   accessibilityLabel={`Remove service header ${String(index + 1)}`}
                   className="h-[48px] w-[48px] items-center justify-center rounded-[14px] border border-danger-border bg-danger active:opacity-70"
                   onPress={() => {
-                    if (props.value.kind !== "custom-headers") {
-                      return;
-                    }
-                    const headers = props.value.headers.filter(
+                    const remaining = headers.filter(
                       (_, candidateIndex) => candidateIndex !== index,
                     );
                     props.onChange({
                       kind: "custom-headers",
-                      headers: headers.length === 0 ? [{ name: "", value: "" }] : headers,
+                      headers: remaining.length === 0 ? [{ name: "", value: "" }] : remaining,
                     });
                   }}
                 >
@@ -172,12 +132,10 @@ export function EnvironmentServiceAuthFields(props: {
             accessibilityRole="button"
             className="min-h-[42px] flex-row items-center justify-center gap-2 rounded-[14px] border border-input-border bg-input px-3 py-2 active:opacity-70"
             onPress={() => {
-              if (props.value.kind === "custom-headers") {
-                props.onChange({
-                  kind: "custom-headers",
-                  headers: [...props.value.headers, { name: "", value: "" }],
-                });
-              }
+              props.onChange({
+                kind: "custom-headers",
+                headers: [...headers, { name: "", value: "" }],
+              });
             }}
           >
             <SymbolView
