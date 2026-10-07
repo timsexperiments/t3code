@@ -16,5 +16,5 @@ android {
 
 dependencies {
   implementation project(':expo-modules-core')
-  implementation 'com.squareup.okhttp3:okhttp:4.9.2'
+  implementation 'com.facebook.react:react-android'
 }
