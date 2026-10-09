@@ -673,8 +673,10 @@ export async function editableAtPoint(page: Page, x: number, y: number) {
   let frame = page.mainFrame();
   let offset = { x: 0, y: 0 };
   for (let depth = 0; depth < 32; depth++) {
-    const target = await frame.evaluate(
-      ({ x, y }) => {
+    const target = await frame.evaluate<
+      boolean | { frame: number; borderX: number; borderY: number }
+    >(`(() => {
+      const x = ${x - offset.x}, y = ${y - offset.y};
         let element = document.elementFromPoint(x, y);
         while (element?.shadowRoot) {
           const inner = element.shadowRoot.elementFromPoint(x, y);
@@ -705,9 +707,7 @@ export async function editableAtPoint(page: Page, x: number, y: number) {
           "submit",
         ];
         return !nonText.includes(element.type) && !element.disabled && !element.readOnly;
-      },
-      { x: x - offset.x, y: y - offset.y },
-    );
+    })()`);
     if (typeof target === "boolean") return target;
     if (target.frame < 0) return false;
     const element = await frame.locator("iframe,frame").nth(target.frame).elementHandle();
