@@ -39,6 +39,7 @@ import {
   type PreviewSessionSnapshot,
   type PreviewViewportSetting,
   ThreadId,
+  PreviewTabId,
   SERVER_BROWSER_AUTOMATION_CLIENT_ID,
   type PreviewAppearancePreference,
 } from "@t3tools/contracts";
@@ -63,6 +64,7 @@ import * as Schema from "effect/Schema";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { publicProxy } from "../htmlRender/publicProxy.ts";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type {
   BrowserContext,
@@ -85,7 +87,7 @@ import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
-import { mountEmbeddedBrowserPage } from "./EmbeddedBrowserPage.prototype.ts";
+import { mountEmbeddedBrowserPage, type EmbeddedBrowserDocument } from "./EmbeddedBrowserPage.ts";
 
 const SERVER_HOST_CLIENT_ID = SERVER_BROWSER_AUTOMATION_CLIENT_ID;
 const RENDER_SCALE = 2;
@@ -159,6 +161,7 @@ export class ServerBrowserLaunchError extends Schema.TaggedError<ServerBrowserLa
 
 export type ServerBrowserViewerOutput =
   | { readonly _tag: "embeddedMessage"; readonly message: unknown }
+  | { readonly _tag: "embeddedSession"; readonly tabId: string }
   | {
       readonly _tag: "frame";
       readonly data: Uint8Array;
@@ -224,7 +227,7 @@ export class ServerBrowser extends Context.Service<
       readonly maxHeight: number;
       readonly quality: number;
       readonly canOperate: boolean;
-      readonly embeddedDocument?: string;
+      readonly embeddedDocument?: EmbeddedBrowserDocument;
     }) => Effect.Effect<
       ServerBrowserViewer,
       ServerBrowserTabNotFoundError | ServerBrowserLaunchError,
@@ -602,11 +605,13 @@ const make = Effect.gen(function* () {
             environmentId,
             connectionId,
             focused: true,
-            liveTabs: [...tabs.values()].map((tab) => ({
-              threadId: tab.threadId,
-              tabId: tab.tabId,
-              visible: tab.viewers.size > 0,
-            })),
+            liveTabs: [...tabs.values()]
+              .filter((tab) => !tab.tabId.startsWith("embedded_"))
+              .map((tab) => ({
+                threadId: tab.threadId,
+                tabId: tab.tabId,
+                visible: tab.viewers.size > 0,
+              })),
           }),
         ),
       ),
@@ -745,11 +750,14 @@ const make = Effect.gen(function* () {
     }
   };
 
-  const createTab = async (snapshot: PreviewSessionSnapshot): Promise<ServerTab> => {
+  const createTab = async (
+    snapshot: PreviewSessionSnapshot,
+    proxyPort?: number,
+  ): Promise<ServerTab> => {
     const adopted = adoptedPages.get(tabKey(snapshot.threadId, snapshot.tabId));
     adoptedPages.delete(tabKey(snapshot.threadId, snapshot.tabId));
     const desktop =
-      adopted === undefined && (await desktopRenders(snapshot))
+      adopted === undefined && proxyPort === undefined && (await desktopRenders(snapshot))
         ? await connectDesktop(snapshot)
         : null;
     // An agent tab without a profile (no client reported one) keeps throwaway storage.
@@ -764,6 +772,12 @@ const make = Effect.gen(function* () {
       (await contexts.contextFor(
         snapshot.profileId ?? "default",
         isolatedContext ? tabKey(snapshot.threadId, snapshot.tabId) : undefined,
+        proxyPort === undefined
+          ? undefined
+          : {
+              proxy: { server: `socks5://127.0.0.1:${proxyPort}`, bypass: "<-loopback>" },
+              serviceWorkers: "block",
+            },
       ));
     if (adopted?.page.isClosed()) throw new Error("The popup closed before it opened.");
     // The desktop page already has its own clipboard; the bridge script is for headless tabs.
@@ -1164,13 +1178,13 @@ const make = Effect.gen(function* () {
     );
   };
 
-  const ensureTab = (snapshot: PreviewSessionSnapshot): Promise<ServerTab> => {
+  const ensureTab = (snapshot: PreviewSessionSnapshot, proxyPort?: number): Promise<ServerTab> => {
     const key = tabKey(snapshot.threadId, snapshot.tabId);
     const pending = pendingTabs.get(key);
     if (pending) return pending;
     const existing = tabs.get(key);
     if (existing) return Promise.resolve(existing);
-    const opening = createTab(snapshot)
+    const opening = createTab(snapshot, proxyPort)
       .catch((cause: unknown) => {
         runFork(
           Effect.logWarning(
@@ -1331,7 +1345,10 @@ const make = Effect.gen(function* () {
       viewportSetting: tab.setting,
       ...(viewport ? { viewport } : {}),
       tabs: [...tabs.values()]
-        .filter((candidate) => candidate.threadId === tab.threadId)
+        .filter(
+          (candidate) =>
+            candidate.threadId === tab.threadId && !candidate.tabId.startsWith("embedded_"),
+        )
         .map((candidate) => ({
           tabId: candidate.tabId,
           url: candidate.page.url() === "about:blank" ? null : candidate.page.url(),
@@ -2161,7 +2178,42 @@ const make = Effect.gen(function* () {
 
   const attachViewer: ServerBrowser["Service"]["attachViewer"] = (input) =>
     Effect.gen(function* () {
-      const tab = yield* findTab(input.threadId, input.tabId);
+      const tab =
+        input.embeddedDocument === undefined
+          ? yield* findTab(input.threadId, input.tabId)
+          : yield* Effect.acquireRelease(
+              Effect.gen(function* () {
+                if (tabs.size + pendingTabs.size >= SERVER_TAB_LIMIT)
+                  return yield* new ServerBrowserLaunchError({
+                    cause: "Embedded page unavailable.",
+                  });
+                const proxyPort = yield* publicProxy.pipe(
+                  Effect.mapError((cause) => new ServerBrowserLaunchError({ cause })),
+                );
+                return yield* Effect.tryPromise({
+                  try: () =>
+                    ensureTab(
+                      {
+                        threadId: input.threadId,
+                        tabId: PreviewTabId.make(`embedded_${NodeCrypto.randomUUID()}`),
+                        runtime: "server",
+                        profileId: INCOGNITO_BROWSER_PROFILE_ID,
+                        navStatus: { _tag: "Idle" },
+                        canGoBack: false,
+                        canGoForward: false,
+                        updatedAt: "",
+                      },
+                      proxyPort,
+                    ),
+                  catch: (cause) => new ServerBrowserLaunchError({ cause }),
+                });
+              }),
+              (tab) =>
+                Effect.promise(async () => {
+                  dropTab(tab, false);
+                  await tab.page.context().close().catch(constVoid);
+                }),
+            );
       const output = yield* Queue.make<ServerBrowserViewerOutput>({
         capacity: VIEWER_OUTPUT_LIMIT,
         strategy: "dropping",
@@ -2253,6 +2305,8 @@ const make = Effect.gen(function* () {
       if (input.canOperate && tab.control.agentId === null && tab.control.controller === null) {
         yield* Effect.promise(() => tab.control.take(viewer.id));
       }
+      if (input.embeddedDocument !== undefined)
+        viewer.push({ _tag: "embeddedSession", tabId: tab.tabId });
       broadcastControl(tab);
       pushFileChooser(tab);
       const embeddedDocument = input.embeddedDocument;
@@ -2262,8 +2316,8 @@ const make = Effect.gen(function* () {
           : yield* Effect.acquireRelease(
               Effect.tryPromise({
                 try: async () => {
-                  if (!viewer.canOperate || !tab.isolatedContext || tab.viewers.size !== 1)
-                    throw new Error("Embedded content requires an isolated interactive viewer.");
+                  if (!tab.isolatedContext || tab.viewers.size !== 1)
+                    throw new Error("Embedded content requires an isolated viewer.");
                   return mountEmbeddedBrowserPage(tab.page, embeddedDocument, (message) =>
                     viewer.push({ _tag: "embeddedMessage", message }),
                   );
@@ -2345,12 +2399,14 @@ const make = Effect.gen(function* () {
         output,
         input: (raw: unknown) =>
           Effect.promise(async () => {
-            if (!viewer.canOperate) return;
             const message = asRecord(raw);
             if (!message) return;
+            if (!viewer.canOperate && !(embedded && message.type === "embeddedMessage")) return;
             try {
               if (message.type === "embeddedMessage" && embedded) {
-                await tab.control.human(viewer.id, () => embedded.send(message.message));
+                if (viewer.canOperate)
+                  await tab.control.human(viewer.id, () => embedded.send(message.message));
+                else await embedded.send(message.message);
               } else if (message.type === "takeControl") {
                 const taking = tab.control.take(viewer.id);
                 broadcastControl(tab);

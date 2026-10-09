@@ -277,7 +277,7 @@ function FileContent(props: {
 
   if (props.activeMode === "preview" && isImageFile) {
     if (isSvgImagePreviewFile(props.relativePath)) {
-      return <WorkspaceFileWebPreview uri={props.previewUri} />;
+      return <WorkspaceFileWebPreview environmentId={props.environmentId} uri={props.previewUri} />;
     }
     return (
       <WorkspaceFileImagePreview
@@ -289,7 +289,7 @@ function FileContent(props: {
   }
 
   if (props.activeMode === "preview" && isBrowserFile) {
-    return <WorkspaceFileWebPreview uri={props.previewUri} />;
+    return <WorkspaceFileWebPreview environmentId={props.environmentId} uri={props.previewUri} />;
   }
 
   if (props.fileError && props.fileContents === null) {

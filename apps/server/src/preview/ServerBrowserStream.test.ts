@@ -22,7 +22,8 @@ import { HttpRouter, HttpServer } from "effect/http";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import * as ServerBrowser from "./ServerBrowser.ts";
-import { routeLayer } from "./ServerBrowserStream.ts";
+import { routeLayerWithEmbeddedAssets } from "./ServerBrowserStream.ts";
+const routeLayer = routeLayerWithEmbeddedAssets(() => Effect.succeed(null));
 
 const platformLayer = NodeHttpPlatform.layer.pipe(Layer.provideMerge(NodeServices.layer));
 
@@ -65,101 +66,110 @@ const mutations = [
 ];
 
 it.effect.each([
-  { hasOperateScope: false, interactive: true },
-  { hasOperateScope: true, interactive: true },
-  { hasOperateScope: true, interactive: false },
-])("streams frames and acks while gating page mutations (%s)", ({ hasOperateScope, interactive }) =>
-  Effect.gen(function* () {
-    const canOperate = hasOperateScope && interactive;
-    const scopes = hasOperateScope
-      ? [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]
-      : [AuthOrchestrationReadScope];
-    const auth = makeAuth(scopes);
-    const inputs: unknown[] = [];
-    const attachments: Parameters<ServerBrowser.ServerBrowser["Service"]["attachViewer"]>[0][] = [];
-    const acked = Promise.withResolvers<void>();
-    const frame = new Uint8Array([255, 216, 255, 217]);
-    const output = yield* Queue.make<ServerBrowser.ServerBrowserViewerOutput>();
-    yield* Queue.offer(output, { _tag: "viewport", width: 1280, height: 800 });
-    yield* Queue.offer(output, {
-      _tag: "embeddedMessage",
-      message: { jsonrpc: "2.0", id: 1, method: "ui/initialize" },
-    });
-    yield* Queue.offer(output, {
-      _tag: "frame",
-      data: frame,
-      ack: Effect.sync(() => acked.resolve()),
-    });
-    const browser = ServerBrowser.ServerBrowser.of({
-      clearProfile: () => Effect.void,
-      reportProfiles: () => Effect.void,
-      openDownload: () => Effect.succeedNone,
-      answerFileChooser: () => Effect.succeed(false),
-      attachViewer: (input) =>
-        Effect.sync(() => {
-          attachments.push(input);
-          return {
-            output,
-            input: (message) => Effect.sync(() => void inputs.push(message)),
-          };
-        }),
-    });
-    const services = yield* Layer.build(
-      HttpRouter.serve(
-        routeLayer.pipe(
-          Layer.provide(Layer.succeed(ServerBrowser.ServerBrowser, browser)),
-          Layer.provide(platformLayer),
-        ),
-        { disableListenLog: true },
-      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest), Layer.provide(auth.layer)),
-    );
-    const server = Context.get(services, HttpServer.HttpServer);
-    const origin = HttpServer.formatAddress(server.address).replace(/^http/, "ws");
-    const resource = `/api/preview-stream/ws?threadId=thread&tabId=tab&wsTicket=one-use-ticket${interactive ? "" : "&interactive=false"}`;
-    const received = Promise.withResolvers<void>();
-    const socket = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocket(`${origin}${resource}`)),
-      (socket) => Effect.sync(() => socket.close()),
-    );
-    socket.binaryType = "arraybuffer";
-    const viewports: unknown[] = [];
-    const frames: Uint8Array[] = [];
-    socket.addEventListener("error", () => received.reject(new Error("stream failed")));
-    socket.addEventListener("message", (event) => {
-      if (typeof event.data === "string") {
-        viewports.push(JSON.parse(event.data));
-        return;
-      }
-      frames.push(new Uint8Array(event.data as ArrayBuffer));
-      for (const message of mutations) socket.send(JSON.stringify(message));
-      socket.send("malformed input");
-      socket.send(JSON.stringify({ type: "ack" }));
-      received.resolve();
-    });
-    yield* Effect.promise(() => received.promise);
-    // The ack follows every mutation on the socket, so this is also a barrier
-    // proving all preceding inputs were processed, without a timing sleep.
-    yield* Effect.promise(() => acked.promise);
-    expect(frames).toEqual([frame]);
-    expect(viewports).toEqual([
-      { type: "viewport", width: 1280, height: 800 },
-      { type: "embeddedMessage", message: { jsonrpc: "2.0", id: 1, method: "ui/initialize" } },
-    ]);
-    expect(inputs).toEqual(canOperate ? [...mutations, null] : []);
-    expect(attachments).toEqual([
-      {
-        threadId: "thread",
-        tabId: "tab",
-        maxWidth: 1280,
-        maxHeight: 800,
-        quality: 70,
-        canOperate,
-      },
-    ]);
-    // In particular, a one-use ticket must never be authenticated a second
-    // time to discover whether this read session also has operate scope.
-    expect(auth.requests).toEqual([resource]);
-  }).pipe(Effect.scoped),
+  { hasOperateScope: false, interactive: true, embedded: false },
+  { hasOperateScope: false, interactive: true, embedded: true },
+  { hasOperateScope: true, interactive: true, embedded: false },
+  { hasOperateScope: true, interactive: false, embedded: false },
+])(
+  "streams frames and acks while gating page mutations (%s)",
+  ({ hasOperateScope, interactive, embedded }) =>
+    Effect.gen(function* () {
+      const canOperate = hasOperateScope && interactive;
+      const scopes = hasOperateScope
+        ? [AuthOrchestrationReadScope, AuthOrchestrationOperateScope]
+        : [AuthOrchestrationReadScope];
+      const auth = makeAuth(scopes);
+      const document = { url: "https://embedded.test/app.html", load: async () => null };
+      const routes = embedded
+        ? routeLayerWithEmbeddedAssets(() => Effect.succeed(document))
+        : routeLayer;
+      const inputs: unknown[] = [];
+      const attachments: Parameters<ServerBrowser.ServerBrowser["Service"]["attachViewer"]>[0][] =
+        [];
+      const acked = Promise.withResolvers<void>();
+      const frame = new Uint8Array([255, 216, 255, 217]);
+      const output = yield* Queue.make<ServerBrowser.ServerBrowserViewerOutput>();
+      yield* Queue.offer(output, { _tag: "viewport", width: 1280, height: 800 });
+      yield* Queue.offer(output, {
+        _tag: "embeddedMessage",
+        message: { jsonrpc: "2.0", id: 1, method: "ui/initialize" },
+      });
+      yield* Queue.offer(output, {
+        _tag: "frame",
+        data: frame,
+        ack: Effect.sync(() => acked.resolve()),
+      });
+      const browser = ServerBrowser.ServerBrowser.of({
+        clearProfile: () => Effect.void,
+        reportProfiles: () => Effect.void,
+        openDownload: () => Effect.succeedNone,
+        answerFileChooser: () => Effect.succeed(false),
+        attachViewer: (input) =>
+          Effect.sync(() => {
+            attachments.push(input);
+            return {
+              output,
+              input: (message) => Effect.sync(() => void inputs.push(message)),
+            };
+          }),
+      });
+      const services = yield* Layer.build(
+        HttpRouter.serve(
+          routes.pipe(
+            Layer.provide(Layer.succeed(ServerBrowser.ServerBrowser, browser)),
+            Layer.provide(platformLayer),
+          ),
+          { disableListenLog: true },
+        ).pipe(Layer.provideMerge(NodeHttpServer.layerTest), Layer.provide(auth.layer)),
+      );
+      const server = Context.get(services, HttpServer.HttpServer);
+      const origin = HttpServer.formatAddress(server.address).replace(/^http/, "ws");
+      const resource = `/api/preview-stream/ws?threadId=thread&tabId=tab&wsTicket=one-use-ticket${interactive ? "" : "&interactive=false"}${embedded ? "&embeddedAsset=/api/assets/test/app.html" : ""}`;
+      const received = Promise.withResolvers<void>();
+      const socket = yield* Effect.acquireRelease(
+        Effect.sync(() => new WebSocket(`${origin}${resource}`)),
+        (socket) => Effect.sync(() => socket.close()),
+      );
+      socket.binaryType = "arraybuffer";
+      const viewports: unknown[] = [];
+      const frames: Uint8Array[] = [];
+      socket.addEventListener("error", () => received.reject(new Error("stream failed")));
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data === "string") {
+          viewports.push(JSON.parse(event.data));
+          return;
+        }
+        frames.push(new Uint8Array(event.data as ArrayBuffer));
+        for (const message of mutations) socket.send(JSON.stringify(message));
+        socket.send("malformed input");
+        socket.send(JSON.stringify({ type: "ack" }));
+        received.resolve();
+      });
+      yield* Effect.promise(() => received.promise);
+      // The ack follows every mutation on the socket, so this is also a barrier
+      // proving all preceding inputs were processed, without a timing sleep.
+      yield* Effect.promise(() => acked.promise);
+      expect(frames).toEqual([frame]);
+      expect(viewports).toEqual([
+        { type: "viewport", width: 1280, height: 800 },
+        { type: "embeddedMessage", message: { jsonrpc: "2.0", id: 1, method: "ui/initialize" } },
+      ]);
+      expect(inputs).toEqual(canOperate ? [...mutations, null] : embedded ? [mutations[0]] : []);
+      expect(attachments).toEqual([
+        {
+          threadId: "thread",
+          tabId: "tab",
+          maxWidth: 1280,
+          maxHeight: 800,
+          quality: 70,
+          canOperate,
+          ...(embedded ? { embeddedDocument: { ...document, allowDownloads: false } } : {}),
+        },
+      ]);
+      // In particular, a one-use ticket must never be authenticated a second
+      // time to discover whether this read session also has operate scope.
+      expect(auth.requests).toEqual([resource]);
+    }).pipe(Effect.scoped),
 );
 
 it.effect.each([
@@ -367,5 +377,44 @@ it.effect.each([
       need,
       command: "sudo t3 browser setup",
     });
+  }).pipe(Effect.scoped),
+);
+
+it.effect("closes an expired embedded asset without attaching a browser", () =>
+  Effect.gen(function* () {
+    const browser = ServerBrowser.ServerBrowser.of({
+      clearProfile: () => Effect.void,
+      reportProfiles: () => Effect.void,
+      openDownload: () => Effect.succeedNone,
+      answerFileChooser: () => Effect.succeed(false),
+      attachViewer: () => Effect.die("expired asset must not attach"),
+    });
+    const services = yield* Layer.build(
+      HttpRouter.serve(
+        routeLayer.pipe(
+          Layer.provide(Layer.succeed(ServerBrowser.ServerBrowser, browser)),
+          Layer.provide(platformLayer),
+        ),
+        { disableListenLog: true },
+      ).pipe(
+        Layer.provideMerge(NodeHttpServer.layerTest),
+        Layer.provide(makeAuth([AuthOrchestrationReadScope]).layer),
+      ),
+    );
+    const origin = HttpServer.formatAddress(
+      Context.get(services, HttpServer.HttpServer).address,
+    ).replace(/^http/, "ws");
+    const closed = Promise.withResolvers<number>();
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const socket = new WebSocket(
+          `${origin}/api/preview-stream/ws?threadId=embedded&tabId=embedded&embeddedAsset=/api/assets/expired/app.html`,
+        );
+        socket.addEventListener("close", (event) => closed.resolve(event.code));
+        return socket;
+      }),
+      (socket) => Effect.sync(() => socket.close()),
+    );
+    expect(yield* Effect.promise(() => closed.promise)).toBe(4404);
   }).pipe(Effect.scoped),
 );

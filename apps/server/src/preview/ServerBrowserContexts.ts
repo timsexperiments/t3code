@@ -5,7 +5,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeModule from "node:module";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import type { Browser, BrowserContext, CDPSession } from "playwright-core";
+import type { Browser, BrowserContext, CDPSession, BrowserContextOptions } from "playwright-core";
 
 import { sandboxDisabled } from "./PreviewBrowserHost.ts";
 
@@ -137,14 +137,18 @@ export class ServerBrowserContexts {
     return this.browser;
   }
 
-  contextFor(profileId: string, isolationKey?: string): Promise<BrowserContext> {
+  contextFor(
+    profileId: string,
+    isolationKey?: string,
+    contextOverrides?: BrowserContextOptions,
+  ): Promise<BrowserContext> {
     if (this.closing) return Promise.reject(new Error("The preview browser is closed."));
     const key = JSON.stringify([profileId, isolationKey ?? null]);
     const cached = this.contexts.get(key);
     if (cached) return cached;
     const cleared = this.clearing.get(key)?.catch(constVoid) ?? Promise.resolve();
     const pending = cleared
-      .then(() => this.createContext(profileId, isolationKey))
+      .then(() => this.createContext(profileId, isolationKey, contextOverrides))
       .then(async (context) => {
         context.on("close", () => {
           if (this.contexts.get(key) === pending) this.contexts.delete(key);
@@ -164,11 +168,15 @@ export class ServerBrowserContexts {
     return pending;
   }
 
-  private async createContext(profileId: string, isolationKey?: string) {
+  private async createContext(
+    profileId: string,
+    isolationKey?: string,
+    contextOverrides?: BrowserContextOptions,
+  ) {
     const contextOptions = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 };
     if (isolationKey !== undefined || profileId === INCOGNITO_BROWSER_PROFILE_ID) {
       const browser = await this.sharedBrowser();
-      return browser.newContext(contextOptions);
+      return browser.newContext({ ...contextOptions, ...contextOverrides });
     }
     const directory = this.profileDirectory(profileId);
     const options = await this.launchOptions();

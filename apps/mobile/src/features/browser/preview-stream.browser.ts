@@ -180,8 +180,11 @@ export function start(configuration: PreviewStreamConfiguration) {
         maxWidth: cap.width,
         maxHeight: cap.height,
         interactive,
+        embeddedAsset: configuration.embeddedAsset,
+        embeddedType: configuration.embeddedType,
       },
       {
+        onEmbeddedMessage: (message) => post({ type: "embeddedMessage", message }),
         onFrame: (jpeg) => painter.paint(jpeg),
         onPointer: showAgentCursor,
         onClipboard: (text) => post({ type: "clipboard", text }),

@@ -47,6 +47,7 @@ export interface PreviewPictureInPictureState {
 }
 
 type NativeStreamBridge = {
+  readonly onEmbeddedMessage?: (message: unknown) => void;
   readonly ref?: Ref<PreviewStreamRef>;
   /** Refresh stream access; new access remounts the document with a fresh ticket. */
   readonly onUnauthorized: () => void;
@@ -186,6 +187,8 @@ function AuthorizedPreviewStream({
     tabId: props.tabId,
     interactive: props.interactive,
     background: props.background,
+    embeddedAsset: props.embeddedAsset,
+    embeddedType: props.embeddedType,
   } satisfies PreviewStreamConfiguration);
   return (
     <PreviewStreamDocumentView
@@ -233,8 +236,10 @@ function PreviewStreamDocumentView({
   origin,
   background,
   compact,
+  embeddedAsset,
   onUnauthorized,
   onGone,
+  onEmbeddedMessage,
   onViewport,
   onControl,
   onPictureInPicture,
@@ -243,6 +248,7 @@ function PreviewStreamDocumentView({
   onStreaming,
   onRecoverProcess,
 }: Omit<NativeStreamBridge, "onUnauthorized"> & {
+  readonly embeddedAsset?: string;
   readonly configuration: string;
   readonly origin: string;
   readonly background: string;
@@ -275,6 +281,7 @@ function PreviewStreamDocumentView({
       ),
     );
   };
+  const streamingChanged = useEffectEvent((streaming: boolean) => onStreamingChange?.(streaming));
   const controlChanged = useEffectEvent((next: PreviewStreamControl | null) => onControl?.(next));
   const command = (input: PreviewStreamInput) =>
     webView.current?.injectJavaScript(
@@ -321,7 +328,7 @@ function PreviewStreamDocumentView({
       view?.injectJavaScript("window.T3PreviewStream?.stop(); true;");
     };
   }, []);
-  useEffect(() => () => onStreamingChange?.(false), [onStreamingChange]);
+  useEffect(() => () => streamingChanged(false), []);
   useEffect(() => () => controlChanged(null), []);
   const processTerminated = () => {
     if (!active.current || failed.current) return;
@@ -330,7 +337,7 @@ function PreviewStreamDocumentView({
   };
   return (
     <View className="flex-1" style={{ backgroundColor: background }}>
-      {!compact ? (
+      {!compact && embeddedAsset === undefined ? (
         <View className="flex-row items-center justify-between gap-2 border-b border-secondary-border px-3 py-2">
           <AppText className="text-xs text-foreground-muted">
             {previewStreamControlLabel(control)}
@@ -380,6 +387,9 @@ function PreviewStreamDocumentView({
           const message = previewStreamMessage(event.nativeEvent.data);
           if (message === null) return;
           switch (message.type) {
+            case "embeddedMessage":
+              onEmbeddedMessage?.(message.message);
+              return;
             case "control":
               setControl(message);
               setPromptText(message.dialog?.defaultValue ?? "");
@@ -425,7 +435,7 @@ function PreviewStreamDocumentView({
                 setControl(null);
                 onControl?.(null);
               }
-              onStreamingChange?.(message.status === "streaming");
+              streamingChanged(message.status === "streaming");
               if (message.status === "streaming") onStreaming();
           }
         }}

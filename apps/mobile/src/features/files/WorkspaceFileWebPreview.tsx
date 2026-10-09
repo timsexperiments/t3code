@@ -1,3 +1,5 @@
+import type { EnvironmentId } from "@t3tools/contracts";
+import { HtmlRenderWebView } from "../threads/HtmlRenderWebView";
 import { environmentMediaSource } from "../../lib/environment-network";
 import { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -7,12 +9,26 @@ import { AppText as Text } from "../../components/AppText";
 import { FilePreviewLoading } from "./FilePreviewFeedback";
 import { LoadingStrip } from "../../components/LoadingStrip";
 
-export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) {
+export function WorkspaceFileWebPreview(props: {
+  readonly environmentId: EnvironmentId;
+  readonly uri: string | null;
+}) {
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (props.uri === null) {
     return <FilePreviewLoading message="Preparing preview..." background="card" />;
+  }
+
+  if (/\.html?(?:$|[?#])/i.test(props.uri)) {
+    return (
+      <HtmlRenderWebView
+        environmentId={props.environmentId}
+        uri={props.uri}
+        title="File preview"
+        nested={false}
+      />
+    );
   }
 
   return (

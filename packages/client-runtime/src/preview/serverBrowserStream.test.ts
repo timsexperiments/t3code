@@ -46,16 +46,19 @@ const target = {
 describe("preview stream control", () => {
   beforeEach(() => vi.stubGlobal("WebSocket", FakeSocket));
   afterEach(() => vi.unstubAllGlobals());
-  const connect = () => {
+  const connect = (embeddedAsset?: string) => {
     const onFrame = vi.fn();
     const onControl = vi.fn();
-    const client = createPreviewStreamClient(target, {
-      onFrame,
-      onControl,
-      onViewport: vi.fn(),
-      onConnectedChange: vi.fn(),
-      onUnauthorized: vi.fn(),
-    });
+    const client = createPreviewStreamClient(
+      { ...target, ...(embeddedAsset === undefined ? {} : { embeddedAsset }) },
+      {
+        onFrame,
+        onControl,
+        onViewport: vi.fn(),
+        onConnectedChange: vi.fn(),
+        onUnauthorized: vi.fn(),
+      },
+    );
     return { client, socket: FakeSocket.current, onFrame, onControl };
   };
   const agent: PreviewStreamControl = {
@@ -157,6 +160,21 @@ describe("preview stream control", () => {
     client.stop();
   });
 
+  it("allows a read-only embedded host to initialize without granting page control", () => {
+    const { client, socket } = connect("https://environment.test/api/assets/signed/app.html");
+    socket.control({ ...agent, canOperate: false });
+    const response = {
+      type: "embeddedMessage" as const,
+      message: { jsonrpc: "2.0", id: 1, result: {} },
+    };
+    expect(client.send(response)).toBe(true);
+    expect(client.send({ type: "takeControl" })).toBe(false);
+    expect(client.send({ type: "text", text: "forbidden" })).toBe(false);
+    expect(client.send({ type: "reload" })).toBe(false);
+    expect(socket.sent).toEqual([JSON.stringify(response)]);
+    client.stop();
+  });
+
   it("revokes input immediately on release and exposes pending dialog state", () => {
     const { client, socket, onControl } = connect();
     const owned = {
@@ -179,30 +197,35 @@ describe("preview stream downloads", () => {
   beforeEach(() => vi.stubGlobal("WebSocket", FakeSocket));
   afterEach(() => vi.unstubAllGlobals());
 
-  it("offers a download at a URL carrying the stream's ticket", () => {
-    const onDownload = vi.fn();
-    createPreviewStreamClient(
-      {
-        ...target,
-        access: { ...target.access, query: { wsTicket: "ticket" }, credentials: false },
-      },
-      {
-        onFrame: vi.fn(),
-        onDownload,
-        onViewport: vi.fn(),
-        onConnectedChange: vi.fn(),
-        onUnauthorized: vi.fn(),
-      },
-    );
-    FakeSocket.current.message(
-      JSON.stringify({ type: "download", id: "d1", fileName: "a b.csv", sizeBytes: 3 }),
-    );
-    expect(onDownload).toHaveBeenCalledExactlyOnceWith({
-      fileName: "a b.csv",
-      sizeBytes: 3,
-      url: "http://preview.test/api/preview-stream/download?threadId=thread&tabId=tab&id=d1&wsTicket=ticket",
-    });
-  });
+  it.each([undefined, "embedded_session"])(
+    "offers a download using the active tab and stream ticket (%s)",
+    (embeddedTab) => {
+      const onDownload = vi.fn();
+      createPreviewStreamClient(
+        {
+          ...target,
+          access: { ...target.access, query: { wsTicket: "ticket" }, credentials: false },
+        },
+        {
+          onFrame: vi.fn(),
+          onDownload,
+          onViewport: vi.fn(),
+          onConnectedChange: vi.fn(),
+          onUnauthorized: vi.fn(),
+        },
+      );
+      if (embeddedTab)
+        FakeSocket.current.message(JSON.stringify({ type: "embeddedSession", tabId: embeddedTab }));
+      FakeSocket.current.message(
+        JSON.stringify({ type: "download", id: "d1", fileName: "a b.csv", sizeBytes: 3 }),
+      );
+      expect(onDownload).toHaveBeenCalledExactlyOnceWith({
+        fileName: "a b.csv",
+        sizeBytes: 3,
+        url: `http://preview.test/api/preview-stream/download?threadId=thread&tabId=${embeddedTab ?? "tab"}&id=d1&wsTicket=ticket`,
+      });
+    },
+  );
 });
 
 describe("preview stream agent pointer", () => {

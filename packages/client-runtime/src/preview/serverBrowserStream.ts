@@ -188,6 +188,8 @@ export const previewStreamModifiers = (event: {
   (event.shiftKey ? 8 : 0);
 
 export interface PreviewStreamTarget {
+  readonly embeddedAsset?: string;
+  readonly embeddedType?: "html" | "mcp";
   readonly access: DeviceHubAccess;
   readonly threadId: string;
   readonly tabId: string;
@@ -244,7 +246,12 @@ export function createPreviewStreamClient(
     maxHeight: String(Math.max(1, Math.round(target.maxHeight))),
   });
   if (target.interactive === false) query.set("interactive", "false");
+  if (target.embeddedAsset !== undefined) {
+    query.set("embeddedAsset", target.embeddedAsset);
+    if (target.embeddedType !== undefined) query.set("embeddedType", target.embeddedType);
+  }
   const url = withDeviceHubQuery(`${target.access.wsBase}/ws?${query.toString()}`, target.access);
+  let assetTarget = target;
   let stopped = false;
   let socket: EnvironmentWebSocket | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -300,7 +307,9 @@ export function createPreviewStreamClient(
         sequence,
         tabId,
       } = message as Record<string, unknown>;
-      if (
+      if (type === "embeddedSession" && typeof tabId === "string") {
+        assetTarget = { ...target, tabId };
+      } else if (
         type === "fileChooser" &&
         typeof id === "string" &&
         typeof multiple === "boolean" &&
@@ -310,7 +319,7 @@ export function createPreviewStreamClient(
         events.onFileChooser?.({
           multiple,
           accept,
-          uploadUrl: previewStreamUploadUrl(target, id),
+          uploadUrl: previewStreamUploadUrl(assetTarget, id),
           credentials: target.access.credentials,
         });
       } else if (type === "fileChooserClosed" && typeof id === "string") {
@@ -340,7 +349,7 @@ export function createPreviewStreamClient(
         events.onDownload?.({
           fileName,
           sizeBytes,
-          url: previewStreamDownloadUrl(target, id),
+          url: previewStreamDownloadUrl(assetTarget, id),
         });
       } else if (type === "viewport" && typeof width === "number" && typeof height === "number") {
         failures = 0;
@@ -404,8 +413,10 @@ export function createPreviewStreamClient(
   return {
     send: (input) => {
       if (socket?.readyState !== WebSocket.OPEN) return false;
-      if (!control?.canOperate) return false;
-      if (input.type !== "takeControl" && control.controller !== "you") return false;
+      if (!(target.embeddedAsset !== undefined && input.type === "embeddedMessage")) {
+        if (!control?.canOperate) return false;
+        if (input.type !== "takeControl" && control.controller !== "you") return false;
+      }
       socket.send(JSON.stringify(input));
       return true;
     },
