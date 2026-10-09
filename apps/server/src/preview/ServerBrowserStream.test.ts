@@ -48,6 +48,7 @@ const makeAuth = (
 };
 
 const mutations = [
+  { type: "embeddedMessage", message: { jsonrpc: "2.0", id: 1, result: {} } },
   { type: "resize", width: 390, height: 844 },
   { type: "mouse", action: "down", x: 10, y: 10, button: "left", buttons: 1 },
   { type: "key", action: "down", key: "Enter" },
@@ -80,6 +81,10 @@ it.effect.each([
     const frame = new Uint8Array([255, 216, 255, 217]);
     const output = yield* Queue.make<ServerBrowser.ServerBrowserViewerOutput>();
     yield* Queue.offer(output, { _tag: "viewport", width: 1280, height: 800 });
+    yield* Queue.offer(output, {
+      _tag: "embeddedMessage",
+      message: { jsonrpc: "2.0", id: 1, method: "ui/initialize" },
+    });
     yield* Queue.offer(output, {
       _tag: "frame",
       data: frame,
@@ -136,7 +141,10 @@ it.effect.each([
     // proving all preceding inputs were processed, without a timing sleep.
     yield* Effect.promise(() => acked.promise);
     expect(frames).toEqual([frame]);
-    expect(viewports).toEqual([{ type: "viewport", width: 1280, height: 800 }]);
+    expect(viewports).toEqual([
+      { type: "viewport", width: 1280, height: 800 },
+      { type: "embeddedMessage", message: { jsonrpc: "2.0", id: 1, method: "ui/initialize" } },
+    ]);
     expect(inputs).toEqual(canOperate ? [...mutations, null] : []);
     expect(attachments).toEqual([
       {

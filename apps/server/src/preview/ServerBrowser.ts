@@ -85,6 +85,7 @@ import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
+import { mountEmbeddedBrowserPage } from "./EmbeddedBrowserPage.prototype.ts";
 
 const SERVER_HOST_CLIENT_ID = SERVER_BROWSER_AUTOMATION_CLIENT_ID;
 const RENDER_SCALE = 2;
@@ -157,6 +158,7 @@ export class ServerBrowserLaunchError extends Schema.TaggedError<ServerBrowserLa
 }
 
 export type ServerBrowserViewerOutput =
+  | { readonly _tag: "embeddedMessage"; readonly message: unknown }
   | {
       readonly _tag: "frame";
       readonly data: Uint8Array;
@@ -222,6 +224,7 @@ export class ServerBrowser extends Context.Service<
       readonly maxHeight: number;
       readonly quality: number;
       readonly canOperate: boolean;
+      readonly embeddedDocument?: string;
     }) => Effect.Effect<
       ServerBrowserViewer,
       ServerBrowserTabNotFoundError | ServerBrowserLaunchError,
@@ -2252,6 +2255,23 @@ const make = Effect.gen(function* () {
       }
       broadcastControl(tab);
       pushFileChooser(tab);
+      const embeddedDocument = input.embeddedDocument;
+      const embedded =
+        embeddedDocument === undefined
+          ? null
+          : yield* Effect.acquireRelease(
+              Effect.tryPromise({
+                try: async () => {
+                  if (!viewer.canOperate || !tab.isolatedContext || tab.viewers.size !== 1)
+                    throw new Error("Embedded content requires an isolated interactive viewer.");
+                  return mountEmbeddedBrowserPage(tab.page, embeddedDocument, (message) =>
+                    viewer.push({ _tag: "embeddedMessage", message }),
+                  );
+                },
+                catch: (cause) => new ServerBrowserLaunchError({ cause }),
+              }),
+              (embedded) => Effect.sync(() => embedded.dispose()),
+            );
       // Full scale: a scaled capture would flash in every other viewer.
       const pushStill = async () => {
         const data = await withCaptureLock(tab, () =>
@@ -2329,7 +2349,9 @@ const make = Effect.gen(function* () {
             const message = asRecord(raw);
             if (!message) return;
             try {
-              if (message.type === "takeControl") {
+              if (message.type === "embeddedMessage" && embedded) {
+                await tab.control.human(viewer.id, () => embedded.send(message.message));
+              } else if (message.type === "takeControl") {
                 const taking = tab.control.take(viewer.id);
                 broadcastControl(tab);
                 await taking;

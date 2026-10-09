@@ -57,6 +57,7 @@ const isPreviewStreamDialog = (value: unknown): value is PreviewStreamControl["d
 
 /** Client-to-server messages. Coordinates are page CSS px. */
 export type PreviewStreamInput =
+  | { readonly type: "embeddedMessage"; readonly message: unknown }
   | { readonly type: "takeControl" }
   | { readonly type: "releaseControl" }
   | { readonly type: "dialog"; readonly accept: boolean; readonly promptText?: string }
@@ -198,6 +199,7 @@ export interface PreviewStreamTarget {
 }
 
 export interface PreviewStreamEvents {
+  readonly onEmbeddedMessage?: (message: unknown) => void;
   /** One complete JPEG frame. */
   readonly onFrame: (jpeg: ArrayBuffer) => void;
   readonly onViewport: (viewport: PreviewStreamViewport) => void;
@@ -325,6 +327,8 @@ export function createPreviewStreamClient(
         events.onPointer?.({ phase, x, y, sequence });
       } else if (type === "popup" && typeof tabId === "string") {
         events.onPopup?.(tabId);
+      } else if (type === "embeddedMessage" && "message" in message) {
+        events.onEmbeddedMessage?.(message.message);
       } else if (type === "clipboard" && typeof text === "string") {
         events.onClipboard?.(text);
       } else if (

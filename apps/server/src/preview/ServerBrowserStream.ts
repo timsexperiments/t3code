@@ -158,6 +158,7 @@ const makeHandler = (browser: ServerBrowser.ServerBrowser["Service"]) =>
               case "fileChooserClosed":
               case "popup":
               case "pointer":
+              case "embeddedMessage":
               case "probe": {
                 const { _tag: type, ...data } = output;
                 return write(JSON.stringify({ type, ...data }));
