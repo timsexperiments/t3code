@@ -8,7 +8,7 @@ import {
   McpAppHostRefusal,
 } from "../../../../packages/client-runtime/src/mcpApps/host.ts";
 import { ServerBrowserContexts } from "./ServerBrowserContexts.ts";
-import { captureViewport, click } from "./ServerBrowserPage.ts";
+import { captureViewport, click, editableAtPoint } from "./ServerBrowserPage.ts";
 import { mountEmbeddedBrowserPage } from "./EmbeddedBrowserPage.ts";
 
 const executable = process.env.T3_EMBEDDED_BROWSER_EXECUTABLE;
@@ -69,7 +69,7 @@ it.skipIf(!executable).each([true, false])(
         onRequestTeardown: () => undefined,
         onSizeChanged: () => undefined,
       });
-      const html = `<script type="module" src="/assets/app.js"></script><img src="/assets/icon.svg"><style>body{font:20px sans-serif}button{width:200px;height:80px}</style><button>Run tool</button><output></output>
+      const html = `<script type="module" src="/assets/app.js"></script><img src="/assets/icon.svg"><style>body{font:20px sans-serif}button{width:200px;height:80px}</style><button>Run tool</button><output></output><input style="position:absolute;left:20px;top:160px;width:200px;height:40px">
 <script>addEventListener("load",()=>parent.postMessage({method:"embedded-test/assets",params:window.assetScriptLoaded},"*"));const send=m=>parent.postMessage({jsonrpc:'2.0',...m},'*');
 window.addEventListener('message',e=>{
  if(e.data.id===1){send({method:'ui/notifications/initialized'});send({method:'embedded-test/ready'});}
@@ -124,6 +124,11 @@ send({id:1,method:'ui/initialize',params:{protocolVersion:'2026-01-26',appInfo:{
         "window.__t3EmbeddedPost({jsonrpc:'2.0',id:99,method:'tools/call',params:{name:'counter',arguments:{increment:99}}})",
       );
       expect(calls).toHaveLength(0);
+      expect(await editableAtPoint(page, 80, 50)).toBe(false);
+      expect(await editableAtPoint(page, 80, 180)).toBe(true);
+      await click(page, { x: 80, y: 180 });
+      await page.keyboard.insertText("embedded input");
+      expect(await appFrame.locator("input").inputValue()).toBe("embedded input");
       await click(page, { x: 80, y: 50 });
       const response = await result.promise;
       expect(response).toMatchObject(

@@ -111,23 +111,6 @@ const AGENT_CURSOR_CLICK_LEAD_MS = 40;
 const sleepUntil = (deadline: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, deadline - Date.now())));
 
-// Touch viewers raise the keyboard for editable targets, including opaque frames.
-const EDITABLE_AT_POINT_SCRIPT = `(x, y) => {
-  let element = document.elementFromPoint(x, y);
-  while (element && element.shadowRoot) {
-    const inner = element.shadowRoot.elementFromPoint(x, y);
-    if (!inner || inner === element) break;
-    element = inner;
-  }
-  if (element && element.tagName === "LABEL" && element.control) element = element.control;
-  if (!element) return false;
-  if (element.tagName === "IFRAME" || element.tagName === "FRAME") return true;
-  if (element.isContentEditable) return true;
-  if (element.tagName === "TEXTAREA") return !element.disabled && !element.readOnly;
-  if (element.tagName !== "INPUT") return false;
-  const nonText = ["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"];
-  return !nonText.includes(element.type) && !element.disabled && !element.readOnly;
-}`;
 const UNATTACHED_FILL_VIEWPORT = { width: 1280, height: 800 } as const;
 const NAVIGATION_TIMEOUT_MS = 15_000;
 const VIEWER_NAVIGATION_OPTIONS = { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT_MS } as const;
@@ -2166,11 +2149,8 @@ const make = Effect.gen(function* () {
       case "probe": {
         const x = num(message.x);
         const y = num(message.y);
-        const result = await session.send("Runtime.evaluate", {
-          expression: `(${EDITABLE_AT_POINT_SCRIPT})(${x}, ${y})`,
-          returnByValue: true,
-        });
-        viewer.push({ _tag: "probe", x, y, editable: result.result.value === true });
+        const editable = await ServerBrowserPage.editableAtPoint(tab.page, x, y);
+        viewer.push({ _tag: "probe", x, y, editable });
         return;
       }
     }
@@ -2433,6 +2413,7 @@ const make = Effect.gen(function* () {
                 await tab.control.human(viewer.id, () =>
                   dispatchViewerInput(tab, session, viewer, message),
                 );
+                if (message.type === "resize") await pushStill();
               }
             } catch {
               // Rejected ownership cannot mutate the page; refresh the viewer's controls.
