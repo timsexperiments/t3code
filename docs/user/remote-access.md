@@ -71,8 +71,9 @@ Values stay in secure storage on this device and apply only to the configured
 HTTPS origin, including its port. Requests to other environment origins receive no added headers.
 `Authorization` and `DPoP` are reserved for T3 Code. Pair with T3 Code as usual.
 
-Headers do not authenticate links opened in an external browser or requests made
-inside device previews and HTML pages. Those flows need separate proxy authentication.
+Headers also apply to browser and device preview streams. Links opened in an
+external browser and subresources inside rendered HTML pages need separate proxy
+authentication.
 
 ### Reach one machine several ways
 

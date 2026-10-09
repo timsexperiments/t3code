@@ -1,4 +1,9 @@
-import { browserEnvironmentNetwork, type EnvironmentNetwork } from "../environmentNetwork.ts";
+import { MjpegDemuxer } from "./mjpeg.ts";
+import {
+  browserEnvironmentNetwork,
+  type EnvironmentNetwork,
+  type EnvironmentWebSocket,
+} from "../environmentNetwork.ts";
 // @effect-diagnostics globalFetch:off globalTimers:off - This browser and WebView transport runs without an Effect runtime.
 /* oxlint-disable unicorn/prefer-add-event-listener -- Each client owns its sockets and their handlers. */
 
@@ -361,7 +366,7 @@ export function createDeviceStreamClient(
   const useWebCodecs = isWebCodecsSupported() && !(platform === "ios" && target.preferMjpeg);
 
   let stopped = true;
-  let socket: WebSocket | null = null;
+  let socket: EnvironmentWebSocket | null = null;
   let controller: AbortController | null = null;
   const retryTimers = new Map<"video" | "input", ReturnType<typeof setTimeout>>();
   let primeController: AbortController | null = null;
@@ -453,6 +458,9 @@ export function createDeviceStreamClient(
     if (!image || stopped || !mjpeg) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let released = false;
+    let blobUrl: string | null = null;
+    let imageLoaded: (() => void) | null = null;
+    const imageController = new AbortController();
     const check = () => {
       if (released || stopped) return;
       if (timer !== null) clearTimeout(timer);
@@ -466,16 +474,56 @@ export function createDeviceStreamClient(
     const error = () => {
       if (!released) fail("Could not receive the device stream. Reconnect to try again.");
     };
-    image.addEventListener("load", check);
+    const loaded = () => {
+      imageLoaded?.();
+      imageLoaded = null;
+      check();
+    };
+    image.addEventListener("load", loaded);
     image.addEventListener("error", error);
     releaseImage = () => {
       released = true;
       if (timer !== null) clearTimeout(timer);
-      image.removeEventListener("load", check);
+      image.removeEventListener("load", loaded);
       image.removeEventListener("error", error);
+      imageLoaded?.();
+      imageController.abort();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
       image.removeAttribute("src");
     };
-    image.src = mjpegUrl();
+    void (async () => {
+      try {
+        const response = await network.fetch(mjpegUrl(), {
+          signal: imageController.signal,
+          credentials: access.credentials ? "include" : "same-origin",
+        });
+        if (released) {
+          await response.body?.cancel();
+          return;
+        }
+        if (response.status === 401 || response.status === 403) return handleUnauthorized();
+        if (!response.ok || !response.body) throw new Error(`stream ${response.status}`);
+        const demuxer = new MjpegDemuxer();
+        const reader = response.body.getReader();
+        for (;;) {
+          if (released) return;
+          const { done, value } = await reader.read();
+          if (released) return;
+          if (done) throw new Error("Device stream ended.");
+          const frame = demuxer.push(value).at(-1);
+          if (!frame) continue;
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          blobUrl = URL.createObjectURL(new Blob([frame], { type: "image/jpeg" }));
+          const loaded = new Promise<void>((resolve) => {
+            imageLoaded = resolve;
+          });
+          image.src = blobUrl;
+          await loaded;
+        }
+      } catch {
+        if (!released) error();
+      }
+    })();
     check();
   };
 

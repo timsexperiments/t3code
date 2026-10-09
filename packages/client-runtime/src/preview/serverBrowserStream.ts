@@ -1,4 +1,8 @@
-import { browserEnvironmentNetwork, type EnvironmentNetwork } from "../environmentNetwork.ts";
+import {
+  browserEnvironmentNetwork,
+  type EnvironmentNetwork,
+  type EnvironmentWebSocket,
+} from "../environmentNetwork.ts";
 // @effect-diagnostics globalTimers:off globalFetch:off - This browser and WebView transport runs without an Effect runtime.
 import { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts";
 import {
@@ -237,7 +241,7 @@ export function createPreviewStreamClient(
   if (target.interactive === false) query.set("interactive", "false");
   const url = withDeviceHubQuery(`${target.access.wsBase}/ws?${query.toString()}`, target.access);
   let stopped = false;
-  let socket: WebSocket | null = null;
+  let socket: EnvironmentWebSocket | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let failures = 0;
   let control: PreviewStreamControl | null = null;

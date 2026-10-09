@@ -1,3 +1,4 @@
+import { useWebViewEnvironmentNetwork } from "../../lib/use-webview-environment-network";
 import { environmentFetch as fetch } from "../../lib/environment-network";
 import previewStreamScript from "@t3tools/mobile-preview-stream";
 import {
@@ -191,6 +192,7 @@ function AuthorizedPreviewStream({
       key={`${attempt}:${configuration}`}
       {...props}
       ref={ref}
+      origin={props.access.httpBase}
       configuration={configuration}
       onUnauthorized={() => {
         // The client has stopped. Restart it with a fresh ticket, backing off between refusals.
@@ -228,6 +230,7 @@ function AuthorizedPreviewStream({
 function PreviewStreamDocumentView({
   ref,
   configuration,
+  origin,
   background,
   compact,
   onUnauthorized,
@@ -241,6 +244,7 @@ function PreviewStreamDocumentView({
   onRecoverProcess,
 }: Omit<NativeStreamBridge, "onUnauthorized"> & {
   readonly configuration: string;
+  readonly origin: string;
   readonly background: string;
   /** False when the view should stop retrying and fail. */
   readonly onUnauthorized: () => boolean;
@@ -249,6 +253,7 @@ function PreviewStreamDocumentView({
   readonly onRecoverProcess: () => boolean;
 }) {
   const webView = useRef<WebView<object>>(null);
+  const network = useWebViewEnvironmentNetwork(webView, origin);
   const active = useRef(true);
   const failed = useRef(false);
   const [status, setStatus] = useState<"connecting" | "streaming" | "error">("connecting");
@@ -278,6 +283,7 @@ function PreviewStreamDocumentView({
   const fail = (message: string) => {
     if (!active.current || failed.current) return;
     failed.current = true;
+    network.dispose();
     webView.current?.injectJavaScript("window.T3PreviewStream?.stop(); true;");
     onStreamingChange?.(false);
     setControl(null);
@@ -319,6 +325,7 @@ function PreviewStreamDocumentView({
   useEffect(() => () => controlChanged(null), []);
   const processTerminated = () => {
     if (!active.current || failed.current) return;
+    network.dispose();
     if (!onRecoverProcess()) fail("Browser viewer stopped. Reconnect to try again.");
   };
   return (
@@ -369,6 +376,7 @@ function PreviewStreamDocumentView({
         }
         onMessage={(event) => {
           if (!active.current || failed.current) return;
+          if (network.receive(event.nativeEvent.data)) return;
           const message = previewStreamMessage(event.nativeEvent.data);
           if (message === null) return;
           switch (message.type) {

@@ -1,6 +1,8 @@
 // @effect-diagnostics globalFetch:off - Platform transport for browser and WebView clients outside the Effect runtime.
 export type EnvironmentHeaders = Readonly<Record<string, string>>;
 
+export type EnvironmentWebSocket = Omit<WebSocket, "ping">;
+
 type SocketProtocols = string | string[];
 
 export interface EnvironmentNetwork {
@@ -9,7 +11,7 @@ export interface EnvironmentNetwork {
     url: string,
     protocols?: SocketProtocols,
     headers?: EnvironmentHeaders,
-  ) => WebSocket;
+  ) => EnvironmentWebSocket;
   readonly requestOptions: (url: string) => { readonly headers: EnvironmentHeaders | undefined };
   readonly mediaSource: (uri: string) => {
     readonly uri: string;

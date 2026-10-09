@@ -426,7 +426,28 @@ function recoveryFixture(platform: "ios" | "android" = "ios", preferMjpeg = true
   const fetch = vi.fn((url: string, init: RequestInit) => {
     const signal = init.signal!;
     signals.push(signal);
-    if (!url.includes("stream.avcc")) return Promise.resolve(new Response("prime"));
+    if (!url.includes("stream.avcc"))
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(body) {
+              body.enqueue(
+                new Uint8Array([
+                  ...new TextEncoder().encode("--frame\r\nContent-Length: 5\r\n\r\n"),
+                  255,
+                  216,
+                  1,
+                  255,
+                  217,
+                ]),
+              );
+              signal.addEventListener("abort", () => body.error(new Error("aborted")), {
+                once: true,
+              });
+            },
+          }),
+        ),
+      );
     return Promise.resolve(
       new Response(
         new ReadableStream<Uint8Array>({
@@ -508,7 +529,7 @@ describe("shared device stream readiness and recovery", () => {
     const { client, events, image } = recoveryFixture();
     client.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(image.src).toContain("stream.mjpeg");
+    expect(image.src).toMatch(/^blob:/);
     expect(events.onStatus).not.toHaveBeenCalledWith("streaming", undefined);
     image.naturalWidth = 400;
     image.naturalHeight = 800;

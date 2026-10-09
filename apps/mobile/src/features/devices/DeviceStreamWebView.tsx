@@ -1,3 +1,4 @@
+import { useWebViewEnvironmentNetwork } from "../../lib/use-webview-environment-network";
 import deviceStreamScript from "@t3tools/mobile-device-stream";
 import {
   useEffect,
@@ -50,6 +51,7 @@ export function DeviceStreamWebView({
     <DeviceStreamDocumentView
       key={`${attempt}:${configuration}`}
       ref={ref}
+      origin={props.access.httpBase}
       configuration={configuration}
       background={props.colors.background}
       onUnauthorized={props.onUnauthorized}
@@ -76,6 +78,7 @@ export function DeviceStreamWebView({
 function DeviceStreamDocumentView({
   ref,
   configuration,
+  origin,
   background,
   onUnauthorized,
   onInputConnected,
@@ -84,12 +87,14 @@ function DeviceStreamDocumentView({
   onRecoverProcess,
 }: NativeStreamBridge & {
   readonly configuration: string;
+  readonly origin: string;
   readonly background: string;
   readonly onRetry: () => void;
   readonly onStreaming: () => void;
   readonly onRecoverProcess: () => boolean;
 }) {
   const webView = useRef<WebView<object>>(null);
+  const network = useWebViewEnvironmentNetwork(webView, origin);
   const active = useRef(true);
   const failed = useRef(false);
   const [status, setStatus] = useState<DeviceStreamStatus>("connecting");
@@ -98,6 +103,7 @@ function DeviceStreamDocumentView({
   const fail = (message: string) => {
     if (!active.current || failed.current) return;
     failed.current = true;
+    network.dispose();
     void onInputConnected(false);
     webView.current?.injectJavaScript("window.T3DeviceStream?.stop(); true;");
     setError(message);
@@ -143,6 +149,7 @@ function DeviceStreamDocumentView({
   }, []);
   const processTerminated = () => {
     if (!active.current || failed.current) return;
+    network.dispose();
     void onInputConnected(false);
     if (!onRecoverProcess()) fail("Device viewer stopped. Reconnect to try again.");
   };
@@ -168,6 +175,7 @@ function DeviceStreamDocumentView({
         }
         onMessage={(event) => {
           if (!active.current || failed.current) return;
+          if (network.receive(event.nativeEvent.data)) return;
           const message = deviceStreamMessage(event.nativeEvent.data);
           if (message?.type === "unauthorized") void onUnauthorized();
           else if (message?.type === "input") void onInputConnected(message.connected);
