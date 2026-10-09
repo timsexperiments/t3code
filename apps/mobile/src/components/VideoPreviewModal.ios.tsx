@@ -1,4 +1,4 @@
-import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
+import { environmentRequestOptions } from "../lib/environment-network";
 import { useIsFocused } from "@react-navigation/native";
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId, useState } from "react";
@@ -80,7 +80,7 @@ function NativeVideoPreview(props: {
           name,
           source.sourceIdentifier ?? "",
           identifier,
-          serviceAuthHeadersForUrl(file?.uri ?? playbackUrl!) ?? {},
+          environmentRequestOptions(file?.uri ?? playbackUrl!).headers ?? {},
         );
         if (!controller.signal.aborted) onRequestClose();
       } finally {

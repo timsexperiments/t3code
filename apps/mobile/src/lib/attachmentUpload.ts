@@ -1,4 +1,4 @@
-import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
+import { environmentRequestOptions } from "../lib/environment-network";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import {
   clampFileAttachmentUploadBytes,
@@ -295,7 +295,7 @@ async function uploadFileBytes(
       httpMethod: "POST",
       uploadType: UploadType.BINARY_CONTENT,
       headers: {
-        ...serviceAuthHeadersForUrl(url),
+        ...environmentRequestOptions(url).headers,
         "Content-Type": composerAttachmentWireMimeType(attachment),
       },
       signal,

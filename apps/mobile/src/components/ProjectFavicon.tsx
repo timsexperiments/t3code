@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../lib/service-auth-transport";
+import { environmentMediaSource } from "../lib/environment-network";
 import { SymbolView } from "./AppSymbol";
 import { AppText } from "./AppText";
 import { Image } from "expo-image";

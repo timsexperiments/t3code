@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "./service-auth-transport";
+import { environmentMediaSource } from "./environment-network";
 import type { VideoThumbnail } from "expo-video";
 
 import type { AttachmentPreviewFile } from "./attachmentDownload";

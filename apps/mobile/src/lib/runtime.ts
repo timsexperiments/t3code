@@ -4,10 +4,7 @@ import * as Socket from "effect/socket/Socket";
 
 import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
 
-import {
-  withEnvironmentServiceAuth,
-  makeEnvironmentServiceAuthWebSocketConstructor,
-} from "./service-auth-transport";
+import { environmentFetch, environmentWebSocket } from "./environment-network";
 import * as Dpop from "../features/cloud/dpop";
 import * as ManagedRelayLayer from "../features/cloud/managedRelayLayer";
 import { resolveCloudPublicConfig } from "../features/cloud/publicConfig";
@@ -21,11 +18,14 @@ function configuredRelayUrl(): string {
   return resolveCloudPublicConfig().relay.url ?? "http://relay.invalid";
 }
 
-const layerHttpClient = layerRemoteHttpClient(withEnvironmentServiceAuth(fetch));
+const layerHttpClient = layerRemoteHttpClient(environmentFetch);
 
-const layerWebSocketConstructor = Layer.succeed(
-  Socket.WebSocketConstructor,
-  makeEnvironmentServiceAuthWebSocketConstructor(),
+const layerWebSocketConstructor = Layer.succeed(Socket.WebSocketConstructor, (url, options) =>
+  environmentWebSocket(
+    url,
+    typeof options === "string" || Array.isArray(options) ? options : undefined,
+    typeof options === "object" && !Array.isArray(options) ? options.headers : undefined,
+  ),
 );
 
 type RuntimeLayerSource =

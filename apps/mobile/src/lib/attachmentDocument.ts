@@ -2,8 +2,7 @@ import { filePreviewDelimiter, parseDelimitedPreview } from "@t3tools/shared/del
 import type { EnvironmentId } from "@t3tools/contracts";
 import { readFilePreviewResponse } from "@t3tools/client-runtime/file-preview";
 import { filePreviewKind, FILE_TEXT_PREVIEW_MAX_BYTES } from "@t3tools/shared/filePreview";
-import { fetch as expoFetch } from "expo/fetch";
-import { withEnvironmentServiceAuth } from "./service-auth-transport";
+import { environmentFetch as fetch } from "./environment-network";
 import { File } from "expo-file-system";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
@@ -13,8 +12,6 @@ import { loadLocalAttachmentPreview } from "./localAttachmentPreview";
 import { downloadAndShareAttachment, shareLocalAttachment } from "./attachmentDownload";
 import { useRefreshAssetUrl } from "../state/assets";
 import { attachmentDocumentPresentation } from "./attachmentDocumentPresentation";
-
-const fetch = withEnvironmentServiceAuth(expoFetch);
 
 const isLocalUri = (uri: string) => /^(file|content):/.test(uri);
 

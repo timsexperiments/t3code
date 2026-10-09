@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import { useNavigation } from "@react-navigation/native";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
@@ -100,7 +101,7 @@ export function HtmlRenderWebView(props: {
   // The theme the loaded document shows; null until it loads.
   const shownTheme = useRef<HtmlRenderTheme | null>(null);
   const source = useMemo(
-    () => ({ uri: props.uri + htmlRenderThemeFragment(initialTheme) }),
+    () => environmentMediaSource(props.uri + htmlRenderThemeFragment(initialTheme)),
     [props.uri, initialTheme],
   );
   useEffect(() => {

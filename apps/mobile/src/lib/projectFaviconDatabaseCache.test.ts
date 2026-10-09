@@ -1,3 +1,6 @@
+vi.mock("expo/fetch", () => ({
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { PROJECT_FAVICON_MAX_DATA_URL_LENGTH } from "@t3tools/client-runtime/project-favicon-cache";
 

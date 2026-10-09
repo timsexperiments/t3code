@@ -11,14 +11,27 @@ vi.mock("expo-secure-store", () => ({
 }));
 
 import {
-  makeEnvironmentServiceAuthWebSocketConstructor,
-  withEnvironmentServiceAuth,
-} from "./service-auth-transport";
+  createEnvironmentNetwork,
+  type EnvironmentNetwork,
+} from "@t3tools/client-runtime/environment-network";
 import {
   clearServiceAuthDocumentForTests,
   makeCustomHeadersServiceAuth,
   setServiceAuthForUrl,
+  removeServiceAuthForUrl,
+  serviceAuthHeadersForUrl,
 } from "../persistence/environment-service-auth";
+
+function network(
+  fetchFn: typeof fetch,
+  openWebSocket = vi.fn<EnvironmentNetwork["openWebSocket"]>(),
+) {
+  return createEnvironmentNetwork({
+    fetch: fetchFn,
+    openWebSocket,
+    headersForUrl: (url) => serviceAuthHeadersForUrl(url) ?? undefined,
+  });
+}
 
 describe("environment service-auth transport", () => {
   beforeEach(() => clearServiceAuthDocumentForTests());
@@ -35,7 +48,7 @@ describe("environment service-auth transport", () => {
       );
       const fetchFn = vi.fn<typeof fetch>(() => Promise.resolve(new Response("{}")));
       yield* HttpClient.get("https://t3code.example.test/.well-known/t3/environment").pipe(
-        Effect.provide(layerRemoteHttpClient(withEnvironmentServiceAuth(fetchFn))),
+        Effect.provide(layerRemoteHttpClient(network(fetchFn).fetch)),
       );
       const headers = new Headers(fetchFn.mock.calls[0]?.[1]?.headers);
       expect(headers.get("X-Service-Id")).toBe("service-client-id");
@@ -49,7 +62,7 @@ describe("environment service-auth transport", () => {
       makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "service-secret" }]),
     );
     const fetchFn = vi.fn<typeof fetch>(() => Promise.resolve(new Response()));
-    const wrapped = withEnvironmentServiceAuth(fetchFn);
+    const wrapped = network(fetchFn).fetch;
     const signal = new AbortController().signal;
     const options = {
       headers: { Authorization: "Bearer t3-token", DPoP: "t3-proof" },
@@ -79,30 +92,45 @@ describe("environment service-auth transport", () => {
     expect(fetchFn.mock.calls.at(-1)?.[1]).toBe(options);
   });
 
+  it("resolves current headers for media and removes them when authentication is cleared", async () => {
+    const transport = network(fetch);
+    const url = "https://t3code.example.test/api/asset";
+    expect(transport.mediaSource(url)).toEqual({ uri: url, headers: undefined });
+    await setServiceAuthForUrl(
+      url,
+      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "test-service" }]),
+    );
+    expect(transport.mediaSource(url)).toEqual({
+      uri: url,
+      headers: { "X-Service-Token": "test-service" },
+    });
+    expect(transport.requestOptions("https://other.example.test/api")).toEqual({
+      headers: undefined,
+    });
+    await removeServiceAuthForUrl(url);
+    expect(transport.mediaSource(url)).toEqual({ uri: url, headers: undefined });
+  });
+
   it("adds saved headers to WebSockets while preserving supplied headers and protocols", async () => {
     await setServiceAuthForUrl(
       "https://t3code.example.test",
       makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "service-secret" }]),
     );
-    const constructor = vi.fn(function FakeWebSocket() {});
-    const makeWebSocket = makeEnvironmentServiceAuthWebSocketConstructor(
-      undefined,
-      constructor as never,
-    );
+    const openWebSocket = vi.fn<EnvironmentNetwork["openWebSocket"]>();
+    const makeWebSocket = network(fetch, openWebSocket).openWebSocket;
 
     makeWebSocket("wss://t3code.example.test/rpc", "t3-code");
     makeWebSocket("wss://other.example.test/rpc", "t3-code");
-    makeWebSocket("wss://t3code.example.test/rpc", { headers: { "X-T3-Client": "mobile" } });
+    makeWebSocket("wss://t3code.example.test/rpc", undefined, { "X-T3-Client": "mobile" });
 
-    expect(constructor).toHaveBeenNthCalledWith(1, "wss://t3code.example.test/rpc", "t3-code", {
-      headers: {
-        "X-Service-Token": "service-secret",
-      },
+    expect(openWebSocket).toHaveBeenNthCalledWith(1, "wss://t3code.example.test/rpc", "t3-code", {
+      "X-Service-Token": "service-secret",
     });
-    expect(constructor).toHaveBeenNthCalledWith(3, "wss://t3code.example.test/rpc", undefined, {
-      headers: { "X-T3-Client": "mobile", "X-Service-Token": "service-secret" },
+    expect(openWebSocket).toHaveBeenNthCalledWith(3, "wss://t3code.example.test/rpc", undefined, {
+      "X-T3-Client": "mobile",
+      "X-Service-Token": "service-secret",
     });
-    expect(constructor).toHaveBeenNthCalledWith(
+    expect(openWebSocket).toHaveBeenNthCalledWith(
       2,
       "wss://other.example.test/rpc",
       "t3-code",

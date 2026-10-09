@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../../lib/service-auth-transport";
+import { environmentMediaSource } from "../../lib/environment-network";
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { createContext, useContext, useEffect, useId, useState } from "react";
 import {

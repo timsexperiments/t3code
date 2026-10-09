@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../lib/service-auth-transport";
+import { environmentMediaSource } from "../lib/environment-network";
 import { useEffect, useEffectEvent } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";

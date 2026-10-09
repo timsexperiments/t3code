@@ -1,4 +1,4 @@
-import { serviceAuthHeadersForUrl } from "../persistence/environment-service-auth";
+import { environmentRequestOptions } from "../lib/environment-network";
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId } from "react";
 import { Alert } from "react-native";
@@ -36,7 +36,7 @@ function NativeFilePreview(props: {
       name ?? "Preview",
       sourceIdentifier ?? "",
       identifier,
-      serviceAuthHeadersForUrl(uri) ?? {},
+      environmentRequestOptions(uri).headers ?? {},
     )
       .catch((error: unknown) => {
         if (!canceled) onOpenError(error);

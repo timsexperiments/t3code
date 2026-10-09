@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../lib/service-auth-transport";
+import { environmentMediaSource } from "../lib/environment-network";
 import { useIsFocused } from "@react-navigation/native";
 import { useEvent } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";

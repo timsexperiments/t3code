@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../../lib/service-auth-transport";
+import { environmentMediaSource } from "../../lib/environment-network";
 import { ThreadContextDivider } from "./thread-context-divider";
 import { ThreadHandoffRow } from "./thread-handoff-row";
 import { SecretRequestCard } from "./SecretRequestCard";

@@ -1,3 +1,6 @@
+vi.mock("expo/fetch", () => ({
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
 import {
   clearServiceAuthDocumentForTests,
   makeCustomHeadersServiceAuth,

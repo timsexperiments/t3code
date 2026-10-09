@@ -1,3 +1,6 @@
+vi.mock("expo/fetch", () => ({
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
 vi.mock("expo-secure-store", () => ({ getItem: () => null }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 

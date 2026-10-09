@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../lib/service-auth-transport";
+import { environmentMediaSource } from "../lib/environment-network";
 import type { ComposerContextRecord, EnvironmentId } from "@t3tools/contracts";
 import { Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";

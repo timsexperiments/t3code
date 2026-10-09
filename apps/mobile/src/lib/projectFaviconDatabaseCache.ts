@@ -1,4 +1,4 @@
-import { environmentMediaSource, withEnvironmentServiceAuth } from "./service-auth-transport";
+import { environmentMediaSource, environmentFetch } from "./environment-network";
 import {
   createProjectFaviconCache as createSharedProjectFaviconCache,
   createProjectFaviconImageLoader,
@@ -119,6 +119,6 @@ export const projectFaviconDatabaseCache = createSharedProjectFaviconCache({
   },
   load: createProjectFaviconImageLoader({
     downscale: downscaleProjectFavicon,
-    fetch: withEnvironmentServiceAuth(fetch),
+    fetch: environmentFetch,
   }),
 });

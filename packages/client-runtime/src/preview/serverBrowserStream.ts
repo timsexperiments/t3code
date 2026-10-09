@@ -1,3 +1,4 @@
+import { browserEnvironmentNetwork, type EnvironmentNetwork } from "../environmentNetwork.ts";
 // @effect-diagnostics globalTimers:off globalFetch:off - This browser and WebView transport runs without an Effect runtime.
 import { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts";
 import {
@@ -128,10 +129,11 @@ const previewStreamUploadUrl = (
 export async function uploadPreviewStreamFiles(
   chooser: PreviewStreamFileChooser,
   files: ReadonlyArray<Blob & { readonly name?: string }>,
+  network: Pick<EnvironmentNetwork, "fetch"> = browserEnvironmentNetwork,
 ): Promise<void> {
   const body = new FormData();
   for (const file of files) body.append("file", file, file.name ?? "file");
-  const response = await fetch(chooser.uploadUrl, {
+  const response = await network.fetch(chooser.uploadUrl, {
     method: "POST",
     body,
     credentials: chooser.credentials ? "include" : "omit",
@@ -224,6 +226,7 @@ const ACK_MESSAGE = JSON.stringify({ type: "ack" });
 export function createPreviewStreamClient(
   target: PreviewStreamTarget,
   events: PreviewStreamEvents,
+  network: Pick<EnvironmentNetwork, "openWebSocket"> = browserEnvironmentNetwork,
 ): PreviewStreamClient {
   const query = new URLSearchParams({
     threadId: target.threadId,
@@ -242,7 +245,7 @@ export function createPreviewStreamClient(
 
   const connect = () => {
     if (stopped) return;
-    const ws = new WebSocket(url);
+    const ws = network.openWebSocket(url);
     ws.binaryType = "arraybuffer";
     socket = ws;
     let opened = false;

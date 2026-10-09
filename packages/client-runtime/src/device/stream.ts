@@ -1,3 +1,4 @@
+import { browserEnvironmentNetwork, type EnvironmentNetwork } from "../environmentNetwork.ts";
 // @effect-diagnostics globalFetch:off globalTimers:off - This browser and WebView transport runs without an Effect runtime.
 /* oxlint-disable unicorn/prefer-add-event-listener -- Each client owns its sockets and their handlers. */
 
@@ -348,6 +349,7 @@ export function createDeviceStreamClient(
   target: DeviceStreamTarget,
   output: HTMLCanvasElement | DeviceFrameSink,
   events: DeviceStreamEvents,
+  network: Pick<EnvironmentNetwork, "fetch" | "openWebSocket"> = browserEnvironmentNetwork,
 ): DeviceStreamClient {
   const { access, platform, deviceId } = target;
   const sink = "present" in output ? output : createCanvasFrameSink(output);
@@ -640,7 +642,7 @@ export function createDeviceStreamClient(
       controller === videoController;
     let retryDetail: string | undefined;
     try {
-      const response = await fetch(httpUrl(videoPath), {
+      const response = await network.fetch(httpUrl(videoPath), {
         signal: videoController.signal,
         credentials: access.credentials ? "include" : "same-origin",
       });
@@ -735,7 +737,7 @@ export function createDeviceStreamClient(
     primeController = controller;
     const timeout = setTimeout(() => controller.abort(), 2_000);
     try {
-      const response = await fetch(httpUrl(`/helper/${device}/stream.mjpeg`), {
+      const response = await network.fetch(httpUrl(`/helper/${device}/stream.mjpeg`), {
         signal: controller.signal,
         credentials: access.credentials ? "include" : "same-origin",
       });
@@ -782,6 +784,7 @@ export function createDeviceStreamClient(
           onMjpegFallback: () => {},
           onUnauthorized: handleUnauthorized,
         },
+        network,
       );
     });
     for (const panel of panelClients) panel.start();
@@ -793,7 +796,7 @@ export function createDeviceStreamClient(
     const session = generation;
     await primeIosHelper(session);
     if (stopped || generation !== session) return;
-    const ws = new WebSocket(wsUrl(`/helper/ws?device=${device}`));
+    const ws = network.openWebSocket(wsUrl(`/helper/ws?device=${device}`));
     ws.binaryType = "arraybuffer";
     socket = ws;
     ws.onopen = () => {
@@ -871,7 +874,7 @@ export function createDeviceStreamClient(
   // Android: one socket for video and input.
   const connectAndroid = () => {
     if (stopped) return;
-    const ws = new WebSocket(wsUrl(`/ws?device=${device}&frame-meta=1`));
+    const ws = network.openWebSocket(wsUrl(`/ws?device=${device}&frame-meta=1`));
     ws.binaryType = "arraybuffer";
     socket = ws;
     ws.onopen = () => {

@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../../lib/service-auth-transport";
+import { environmentMediaSource } from "../../lib/environment-network";
 import { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { WebView } from "react-native-webview";

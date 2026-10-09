@@ -1,4 +1,4 @@
-import { serviceAuthRequestOptions } from "./service-auth-transport";
+import { environmentRequestOptions } from "./environment-network";
 import type { ChatFileAttachment } from "@t3tools/contracts";
 import type { Directory } from "expo-file-system";
 import type { SharingOptions } from "expo-sharing";
@@ -185,7 +185,7 @@ export async function openAttachmentInViewer(input: {
     } else {
       await File.downloadFileAsync(input.uri, cached.file, {
         signal: input.signal,
-        ...serviceAuthRequestOptions(input.uri),
+        ...environmentRequestOptions(input.uri),
       });
     }
     if (input.signal.aborted) return;
@@ -222,7 +222,7 @@ export async function downloadAttachmentForPreview(input: {
     }
     await File.downloadFileAsync(input.url, cached.file, {
       signal: input.signal,
-      ...serviceAuthRequestOptions(input.url),
+      ...environmentRequestOptions(input.url),
     });
     if (input.signal.aborted) {
       cached.preview.dispose();

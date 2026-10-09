@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../../lib/service-auth-transport";
+import { environmentMediaSource } from "../../lib/environment-network";
 import type { ChatAttachment, EnvironmentId } from "@t3tools/contracts";
 import { Image } from "expo-image";
 import { Pressable, ScrollView, View } from "react-native";

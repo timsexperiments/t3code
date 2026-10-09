@@ -386,6 +386,10 @@
     "./state/mcp-apps": {
       "types": "./src/state/mcpApps.ts",
       "default": "./src/state/mcpApps.ts"
+    },
+    "./environment-network": {
+      "types": "./src/environmentNetwork.ts",
+      "default": "./src/environmentNetwork.ts"
     }
   },
   "scripts": {

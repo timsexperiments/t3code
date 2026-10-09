@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../../lib/service-auth-transport";
+import { environmentMediaSource } from "../../lib/environment-network";
 import { useId, useMemo, useState } from "react";
 import { Image, Pressable, View } from "react-native";
 

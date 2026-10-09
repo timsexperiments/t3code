@@ -1,4 +1,4 @@
-import { environmentMediaSource } from "../lib/service-auth-transport";
+import { environmentMediaSource } from "../lib/environment-network";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useState } from "react";
 import { Pressable, View } from "react-native";

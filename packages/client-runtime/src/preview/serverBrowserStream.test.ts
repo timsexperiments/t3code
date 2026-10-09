@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { createEnvironmentNetwork } from "../environmentNetwork.ts";
+
 import { createPreviewStreamClient, type PreviewStreamControl } from "./serverBrowserStream.ts";
 
 class FakeSocket extends EventTarget {
@@ -62,6 +64,37 @@ describe("preview stream control", () => {
     generation: 1,
     dialog: null,
   };
+
+  it.each([undefined, { "X-Service-Token": "test-service" }])(
+    "uses the supplied transport for frames and cleanup with headers %j",
+    (headers) => {
+      const openWebSocket = vi.fn((url: string) => new WebSocket(url));
+      const network = createEnvironmentNetwork({
+        fetch,
+        openWebSocket,
+        headersForUrl: () => headers,
+      });
+      const onFrame = vi.fn();
+      const client = createPreviewStreamClient(
+        target,
+        {
+          onFrame,
+          onViewport: vi.fn(),
+          onConnectedChange: vi.fn(),
+          onUnauthorized: vi.fn(),
+        },
+        network,
+      );
+      const socket = FakeSocket.current;
+      const frame = new Uint8Array([1, 2, 3]).buffer;
+      socket.message(frame);
+      expect(onFrame).toHaveBeenCalledWith(frame);
+      expect(socket.sent).toContain(JSON.stringify({ type: "ack" }));
+      expect(openWebSocket).toHaveBeenCalledWith(socket.url, undefined, headers);
+      client.stop();
+      expect(socket.readyState).toBe(3);
+    },
+  );
 
   it("marks passive viewers without changing active viewer URLs", () => {
     const { client, socket } = connect();
