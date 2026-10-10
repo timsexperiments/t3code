@@ -1,3 +1,4 @@
+import { environmentMediaSource, environmentFetch } from "./environment-network";
 import {
   createProjectFaviconCache as createSharedProjectFaviconCache,
   createProjectFaviconImageLoader,
@@ -45,7 +46,10 @@ export async function downscaleProjectFavicon(
   ]);
   for (const size of [PROJECT_FAVICON_THUMBNAIL_SIZE, PROJECT_FAVICON_THUMBNAIL_SIZE / 2]) {
     signal.throwIfAborted();
-    const decoded = await Image.loadAsync(image.url, { maxWidth: size, maxHeight: size });
+    const decoded = await Image.loadAsync(environmentMediaSource(image.url), {
+      maxWidth: size,
+      maxHeight: size,
+    });
     const cacheKey = `t3-favicon-thumbnail:${size}:${image.url}`;
     try {
       signal.throwIfAborted();
@@ -113,5 +117,8 @@ export const projectFaviconDatabaseCache = createSharedProjectFaviconCache({
     remove: (key, entry) =>
       runDatabase((database) => database.removeCache(entry.environmentId, CACHE_KIND, key)),
   },
-  load: createProjectFaviconImageLoader({ downscale: downscaleProjectFavicon }),
+  load: createProjectFaviconImageLoader({
+    downscale: downscaleProjectFavicon,
+    fetch: environmentFetch,
+  }),
 });

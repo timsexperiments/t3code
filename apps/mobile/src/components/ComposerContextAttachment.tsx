@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import type { ComposerContextRecord, EnvironmentId } from "@t3tools/contracts";
 import { Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";
@@ -98,7 +99,7 @@ export function ComposerContextAttachment(props: {
           onPress={() => setPreviewOpen(true)}
         >
           <Image
-            source={{ uri }}
+            source={environmentMediaSource(uri)}
             style={{ width: "100%", height: 280 }}
             contentFit="contain"
             accessibilityLabel={record.name}

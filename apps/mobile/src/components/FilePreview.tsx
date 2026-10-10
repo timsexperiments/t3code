@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { useEffect, useEffectEvent } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
@@ -74,7 +75,7 @@ export function FilePreview(props: {
   if (props.source.actionsSource) return <MediaImagePreview {...props} />;
   return (
     <ImageViewing
-      images={[{ uri: props.source.uri }]}
+      images={[environmentMediaSource(props.source.uri)]}
       imageIndex={0}
       visible
       onRequestClose={props.onRequestClose}

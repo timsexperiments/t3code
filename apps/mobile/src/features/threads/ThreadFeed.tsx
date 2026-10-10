@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import { ThreadContextDivider } from "./thread-context-divider";
 import { ThreadHandoffRow } from "./thread-handoff-row";
 import { SecretRequestCard } from "./SecretRequestCard";
@@ -444,7 +445,7 @@ function MessageAttachmentImage(props: {
         }
       >
         <Image
-          source={{ uri }}
+          source={environmentMediaSource(uri)}
           className={props.className}
           resizeMode="cover"
           onLoad={() => {

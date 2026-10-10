@@ -23,7 +23,6 @@ import { FilePreviewLoading, FilePreviewNotice } from "./FilePreviewFeedback";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { SourceFileSurface } from "./SourceFileSurface";
-import { WorkspaceFileWebPreview } from "./WorkspaceFileWebPreview";
 import { HtmlRenderWebView } from "../threads/HtmlRenderWebView";
 
 /**
@@ -57,7 +56,6 @@ function AttachmentDocumentBody(props: {
   readonly document: ReturnType<typeof useAttachmentDocument>;
   readonly name: string;
   readonly environmentId: EnvironmentId | null;
-  readonly htmlRender: boolean;
   readonly nativeViewer: "pending" | "open" | "unavailable" | null;
   readonly nativeError: string | null;
   readonly onOpenNative: () => void;
@@ -144,11 +142,15 @@ function AttachmentDocumentBody(props: {
   if (document.kind === "audio") {
     return <AudioFilePreview key={document.revision} uri={document.uri} onRetry={document.retry} />;
   }
-  if (document.kind === "html") {
-    return props.htmlRender ? (
-      <HtmlRenderWebView key={document.uri} uri={document.uri} title={props.name} nested={false} />
-    ) : (
-      <WorkspaceFileWebPreview uri={document.uri} />
+  if (document.kind === "html" && props.environmentId !== null) {
+    return (
+      <HtmlRenderWebView
+        environmentId={props.environmentId}
+        key={document.uri}
+        uri={document.uri}
+        title={props.name}
+        nested={false}
+      />
     );
   }
   return (
@@ -415,7 +417,6 @@ export function AttachmentFileScreen(props: AttachmentFileScreenProps) {
         document={document}
         name={params.name}
         environmentId={environmentId}
-        htmlRender={params.htmlRender === "1"}
         nativeViewer={nativeViewer}
         nativeError={nativeError}
         onOpenNative={() => {

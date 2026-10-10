@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { useIsFocused } from "@react-navigation/native";
 import { useEvent } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -34,7 +35,7 @@ function LoadedMediaVideo(props: {
     if (signal.aborted) return;
     if (uri === null) throw new Error("Video unavailable");
     player.pause();
-    await player.replaceAsync({ uri, contentType: "progressive" });
+    await player.replaceAsync({ ...environmentMediaSource(uri), contentType: "progressive" });
     if (!signal.aborted && props.playRequested && active.current) player.play();
   });
 

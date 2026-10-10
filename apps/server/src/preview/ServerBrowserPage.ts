@@ -667,3 +667,60 @@ export const RECORDING_ENCODER_SCRIPT = `(() => {
     },
   };
 })()`;
+
+/** Tests the actual hit target, including inputs inside sandboxed frames. */
+export async function editableAtPoint(page: Page, x: number, y: number) {
+  let frame = page.mainFrame();
+  let offset = { x: 0, y: 0 };
+  for (let depth = 0; depth < 32; depth++) {
+    const target = await frame.evaluate<
+      boolean | { frame: number; borderX: number; borderY: number }
+    >(`(() => {
+      const x = ${x - offset.x}, y = ${y - offset.y};
+        let element = document.elementFromPoint(x, y);
+        while (element?.shadowRoot) {
+          const inner = element.shadowRoot.elementFromPoint(x, y);
+          if (!inner || inner === element) break;
+          element = inner;
+        }
+        if (element instanceof HTMLIFrameElement || element instanceof HTMLFrameElement) {
+          return {
+            frame: Array.from(document.querySelectorAll("iframe,frame")).indexOf(element),
+            borderX: element.clientLeft,
+            borderY: element.clientTop,
+          };
+        }
+        if (element instanceof HTMLLabelElement && element.control) element = element.control;
+        if (element instanceof HTMLElement && element.isContentEditable) return true;
+        if (element instanceof HTMLTextAreaElement) return !element.disabled && !element.readOnly;
+        if (!(element instanceof HTMLInputElement)) return false;
+        const nonText = [
+          "button",
+          "checkbox",
+          "color",
+          "file",
+          "hidden",
+          "image",
+          "radio",
+          "range",
+          "reset",
+          "submit",
+        ];
+        return !nonText.includes(element.type) && !element.disabled && !element.readOnly;
+    })()`);
+    if (typeof target === "boolean") return target;
+    if (target.frame < 0) return false;
+    const element = await frame.locator("iframe,frame").nth(target.frame).elementHandle();
+    if (!element) return false;
+    try {
+      const box = await element.boundingBox();
+      const child = await element.contentFrame();
+      if (!box || !child) return false;
+      frame = child;
+      offset = { x: box.x + target.borderX, y: box.y + target.borderY };
+    } finally {
+      await element.dispose();
+    }
+  }
+  return false;
+}

@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -9,7 +10,7 @@ function timestamp(seconds: number) {
 }
 
 export function AudioFilePreview(props: { uri: string; onRetry: () => void }) {
-  const player = useAudioPlayer({ uri: props.uri }, { updateInterval: 500 });
+  const player = useAudioPlayer(environmentMediaSource(props.uri), { updateInterval: 500 });
   const status = useAudioPlayerStatus(player);
   const [seekError, setSeekError] = useState(false);
   const seek = (seconds: number, play = false) => {

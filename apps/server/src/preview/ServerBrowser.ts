@@ -39,6 +39,7 @@ import {
   type PreviewSessionSnapshot,
   type PreviewViewportSetting,
   ThreadId,
+  PreviewTabId,
   SERVER_BROWSER_AUTOMATION_CLIENT_ID,
   type PreviewAppearancePreference,
 } from "@t3tools/contracts";
@@ -59,6 +60,7 @@ import * as Schema from "effect/Schema";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { publicProxy } from "../htmlRender/publicProxy.ts";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type {
   BrowserContext,
@@ -81,6 +83,7 @@ import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
+import { mountEmbeddedBrowserPage, type EmbeddedBrowserDocument } from "./EmbeddedBrowserPage.ts";
 
 const SERVER_HOST_CLIENT_ID = SERVER_BROWSER_AUTOMATION_CLIENT_ID;
 const RENDER_SCALE = 2;
@@ -104,23 +107,6 @@ const AGENT_CURSOR_CLICK_LEAD_MS = 40;
 const sleepUntil = (deadline: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, deadline - Date.now())));
 
-// Touch viewers raise the keyboard for editable targets, including opaque frames.
-const EDITABLE_AT_POINT_SCRIPT = `(x, y) => {
-  let element = document.elementFromPoint(x, y);
-  while (element && element.shadowRoot) {
-    const inner = element.shadowRoot.elementFromPoint(x, y);
-    if (!inner || inner === element) break;
-    element = inner;
-  }
-  if (element && element.tagName === "LABEL" && element.control) element = element.control;
-  if (!element) return false;
-  if (element.tagName === "IFRAME" || element.tagName === "FRAME") return true;
-  if (element.isContentEditable) return true;
-  if (element.tagName === "TEXTAREA") return !element.disabled && !element.readOnly;
-  if (element.tagName !== "INPUT") return false;
-  const nonText = ["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"];
-  return !nonText.includes(element.type) && !element.disabled && !element.readOnly;
-}`;
 const UNATTACHED_FILL_VIEWPORT = { width: 1280, height: 800 } as const;
 const NAVIGATION_TIMEOUT_MS = 15_000;
 const VIEWER_NAVIGATION_OPTIONS = { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT_MS } as const;
@@ -153,6 +139,8 @@ export class ServerBrowserLaunchError extends Schema.TaggedError<ServerBrowserLa
 }
 
 export type ServerBrowserViewerOutput =
+  | { readonly _tag: "embeddedMessage"; readonly message: unknown }
+  | { readonly _tag: "embeddedSession"; readonly tabId: string }
   | {
       readonly _tag: "frame";
       readonly data: Uint8Array;
@@ -218,6 +206,7 @@ export class ServerBrowser extends Context.Service<
       readonly maxHeight: number;
       readonly quality: number;
       readonly canOperate: boolean;
+      readonly embeddedDocument?: EmbeddedBrowserDocument;
     }) => Effect.Effect<
       ServerBrowserViewer,
       ServerBrowserTabNotFoundError | ServerBrowserLaunchError,
@@ -595,11 +584,13 @@ const make = Effect.gen(function* () {
             environmentId,
             connectionId,
             focused: true,
-            liveTabs: [...tabs.values()].map((tab) => ({
-              threadId: tab.threadId,
-              tabId: tab.tabId,
-              visible: tab.viewers.size > 0,
-            })),
+            liveTabs: [...tabs.values()]
+              .filter((tab) => !tab.tabId.startsWith("embedded_"))
+              .map((tab) => ({
+                threadId: tab.threadId,
+                tabId: tab.tabId,
+                visible: tab.viewers.size > 0,
+              })),
           }),
         ),
       ),
@@ -738,11 +729,14 @@ const make = Effect.gen(function* () {
     }
   };
 
-  const createTab = async (snapshot: PreviewSessionSnapshot): Promise<ServerTab> => {
+  const createTab = async (
+    snapshot: PreviewSessionSnapshot,
+    proxyPort?: number,
+  ): Promise<ServerTab> => {
     const adopted = adoptedPages.get(tabKey(snapshot.threadId, snapshot.tabId));
     adoptedPages.delete(tabKey(snapshot.threadId, snapshot.tabId));
     const desktop =
-      adopted === undefined && (await desktopRenders(snapshot))
+      adopted === undefined && proxyPort === undefined && (await desktopRenders(snapshot))
         ? await connectDesktop(snapshot)
         : null;
     // An agent tab without a profile (no client reported one) keeps throwaway storage.
@@ -757,6 +751,12 @@ const make = Effect.gen(function* () {
       (await contexts.contextFor(
         snapshot.profileId ?? "default",
         isolatedContext ? tabKey(snapshot.threadId, snapshot.tabId) : undefined,
+        proxyPort === undefined
+          ? undefined
+          : {
+              proxy: { server: `socks5://127.0.0.1:${proxyPort}`, bypass: "<-loopback>" },
+              serviceWorkers: "block",
+            },
       ));
     if (adopted?.page.isClosed()) throw new Error("The popup closed before it opened.");
     // The desktop page already has its own clipboard; the bridge script is for headless tabs.
@@ -1157,13 +1157,13 @@ const make = Effect.gen(function* () {
     );
   };
 
-  const ensureTab = (snapshot: PreviewSessionSnapshot): Promise<ServerTab> => {
+  const ensureTab = (snapshot: PreviewSessionSnapshot, proxyPort?: number): Promise<ServerTab> => {
     const key = tabKey(snapshot.threadId, snapshot.tabId);
     const pending = pendingTabs.get(key);
     if (pending) return pending;
     const existing = tabs.get(key);
     if (existing) return Promise.resolve(existing);
-    const opening = createTab(snapshot)
+    const opening = createTab(snapshot, proxyPort)
       .catch((cause: unknown) => {
         runFork(
           Effect.logWarning(
@@ -1324,7 +1324,10 @@ const make = Effect.gen(function* () {
       viewportSetting: tab.setting,
       ...(viewport ? { viewport } : {}),
       tabs: [...tabs.values()]
-        .filter((candidate) => candidate.threadId === tab.threadId)
+        .filter(
+          (candidate) =>
+            candidate.threadId === tab.threadId && !candidate.tabId.startsWith("embedded_"),
+        )
         .map((candidate) => ({
           tabId: candidate.tabId,
           url: candidate.page.url() === "about:blank" ? null : candidate.page.url(),
@@ -2142,11 +2145,8 @@ const make = Effect.gen(function* () {
       case "probe": {
         const x = num(message.x);
         const y = num(message.y);
-        const result = await session.send("Runtime.evaluate", {
-          expression: `(${EDITABLE_AT_POINT_SCRIPT})(${x}, ${y})`,
-          returnByValue: true,
-        });
-        viewer.push({ _tag: "probe", x, y, editable: result.result.value === true });
+        const editable = await ServerBrowserPage.editableAtPoint(tab.page, x, y);
+        viewer.push({ _tag: "probe", x, y, editable });
         return;
       }
     }
@@ -2154,7 +2154,42 @@ const make = Effect.gen(function* () {
 
   const attachViewer: ServerBrowser["Service"]["attachViewer"] = (input) =>
     Effect.gen(function* () {
-      const tab = yield* findTab(input.threadId, input.tabId);
+      const tab =
+        input.embeddedDocument === undefined
+          ? yield* findTab(input.threadId, input.tabId)
+          : yield* Effect.acquireRelease(
+              Effect.gen(function* () {
+                if (tabs.size + pendingTabs.size >= SERVER_TAB_LIMIT)
+                  return yield* new ServerBrowserLaunchError({
+                    cause: "Embedded page unavailable.",
+                  });
+                const proxyPort = yield* publicProxy.pipe(
+                  Effect.mapError((cause) => new ServerBrowserLaunchError({ cause })),
+                );
+                return yield* Effect.tryPromise({
+                  try: () =>
+                    ensureTab(
+                      {
+                        threadId: input.threadId,
+                        tabId: PreviewTabId.make(`embedded_${NodeCrypto.randomUUID()}`),
+                        runtime: "server",
+                        profileId: INCOGNITO_BROWSER_PROFILE_ID,
+                        navStatus: { _tag: "Idle" },
+                        canGoBack: false,
+                        canGoForward: false,
+                        updatedAt: "",
+                      },
+                      proxyPort,
+                    ),
+                  catch: (cause) => new ServerBrowserLaunchError({ cause }),
+                });
+              }),
+              (tab) =>
+                Effect.promise(async () => {
+                  dropTab(tab, false);
+                  await tab.page.context().close().catch(constVoid);
+                }),
+            );
       const output = yield* Queue.make<ServerBrowserViewerOutput>({
         capacity: VIEWER_OUTPUT_LIMIT,
         strategy: "dropping",
@@ -2246,8 +2281,27 @@ const make = Effect.gen(function* () {
       if (input.canOperate && tab.control.agentId === null && tab.control.controller === null) {
         yield* Effect.promise(() => tab.control.take(viewer.id));
       }
+      if (input.embeddedDocument !== undefined)
+        viewer.push({ _tag: "embeddedSession", tabId: tab.tabId });
       broadcastControl(tab);
       pushFileChooser(tab);
+      const embeddedDocument = input.embeddedDocument;
+      const embedded =
+        embeddedDocument === undefined
+          ? null
+          : yield* Effect.acquireRelease(
+              Effect.tryPromise({
+                try: async () => {
+                  if (!tab.isolatedContext || tab.viewers.size !== 1)
+                    throw new Error("Embedded content requires an isolated viewer.");
+                  return mountEmbeddedBrowserPage(tab.page, embeddedDocument, (message) =>
+                    viewer.push({ _tag: "embeddedMessage", message }),
+                  );
+                },
+                catch: (cause) => new ServerBrowserLaunchError({ cause }),
+              }),
+              (embedded) => Effect.sync(() => embedded.dispose()),
+            );
       // Full scale: a scaled capture would flash in every other viewer.
       const pushStill = async () => {
         const data = await withCaptureLock(tab, () =>
@@ -2321,11 +2375,15 @@ const make = Effect.gen(function* () {
         output,
         input: (raw: unknown) =>
           Effect.promise(async () => {
-            if (!viewer.canOperate) return;
             const message = asRecord(raw);
             if (!message) return;
+            if (!viewer.canOperate && !(embedded && message.type === "embeddedMessage")) return;
             try {
-              if (message.type === "takeControl") {
+              if (message.type === "embeddedMessage" && embedded) {
+                if (viewer.canOperate)
+                  await tab.control.human(viewer.id, () => embedded.send(message.message));
+                else await embedded.send(message.message);
+              } else if (message.type === "takeControl") {
                 const taking = tab.control.take(viewer.id);
                 broadcastControl(tab);
                 await taking;
@@ -2351,6 +2409,7 @@ const make = Effect.gen(function* () {
                 await tab.control.human(viewer.id, () =>
                   dispatchViewerInput(tab, session, viewer, message),
                 );
+                if (message.type === "resize") await pushStill();
               }
             } catch {
               // Rejected ownership cannot mutate the page; refresh the viewer's controls.

@@ -1,3 +1,12 @@
+vi.mock("expo/fetch", () => ({
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
+import {
+  clearServiceAuthDocumentForTests,
+  makeCustomHeadersServiceAuth,
+  setServiceAuthForUrl,
+} from "../persistence/environment-service-auth";
+
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -59,6 +68,12 @@ vi.mock("../state/session", () => ({
 vi.mock("./uuid", () => ({
   uuidv4: () => "uuid",
   randomHex: () => "0000",
+}));
+
+vi.mock("expo-secure-store", () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
+  getItem: () => null,
+  setItemAsync: async () => undefined,
 }));
 
 vi.mock("expo-file-system", () => ({
@@ -196,6 +211,7 @@ function removeCallsFor(attachmentId: string): number {
 
 describe("prepareTurnAttachments", () => {
   beforeEach(() => {
+    clearServiceAuthDocumentForTests();
     mocks.canOperate = true;
     mocks.documentUri = "file:///documents";
     mocks.createAssetUrl.mockReset();
@@ -223,6 +239,25 @@ describe("prepareTurnAttachments", () => {
         : { _tag: "Success", value: undefined },
     );
     mocks.upload.mockResolvedValue({ status: 204, body: "", headers: {} });
+  });
+
+  it("passes service headers to native uploads without replacing their content type", async () => {
+    await setServiceAuthForUrl(
+      "https://environment.example",
+      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "test-secret" }]),
+    );
+    await prepareTurnAttachments({
+      environmentId,
+      attachments: [fileBackedImage],
+      supportsImageUploads: true,
+    });
+    expect(mocks.upload).toHaveBeenCalledWith(
+      fileBackedImage.fileUri,
+      "https://environment.example/api/attachments/upload/signed",
+      expect.objectContaining({
+        headers: { "X-Service-Token": "test-secret", "Content-Type": "image/png" },
+      }),
+    );
   });
 
   it("does not mint or transfer attachments without task operation access", async () => {

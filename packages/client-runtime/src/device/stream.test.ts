@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { createEnvironmentNetwork, type EnvironmentHeaders } from "../environmentNetwork.ts";
+
 import {
   createDeviceStreamClient,
   AvccDemuxer,
@@ -49,7 +51,7 @@ describe("native device stream transport", () => {
     vi.unstubAllGlobals();
   });
 
-  function setup(platform: "ios" | "android") {
+  function setup(platform: "ios" | "android", headers?: EnvironmentHeaders) {
     vi.useFakeTimers();
     vi.stubGlobal("VideoDecoder", vi.fn());
     vi.stubGlobal("EncodedVideoChunk", vi.fn());
@@ -74,8 +76,14 @@ describe("native device stream transport", () => {
       }
     }
     vi.stubGlobal("WebSocket", FakeSocket);
-    const fetch = vi.fn(() => Promise.resolve(new Response("frame")));
+    const fetch = vi.fn<typeof globalThis.fetch>(() => Promise.resolve(new Response("frame")));
     vi.stubGlobal("fetch", fetch);
+    const openWebSocket = vi.fn((url: string) => new WebSocket(url));
+    const network = createEnvironmentNetwork({
+      fetch,
+      openWebSocket,
+      headersForUrl: () => headers,
+    });
     const events = {
       onStatus: vi.fn(),
       onScreen: vi.fn(),
@@ -97,9 +105,25 @@ describe("native device stream transport", () => {
       },
       { getContext: () => null } as unknown as HTMLCanvasElement,
       events,
+      network,
     );
-    return { client, opened, waitForSocket, events, fetch };
+    return { client, opened, waitForSocket, events, fetch, openWebSocket };
   }
+
+  it.each([undefined, { "X-Service-Token": "test-service" }])(
+    "uses one transport for iOS discovery and controls with headers %j",
+    async (headers) => {
+      const { client, opened, fetch, openWebSocket } = setup("ios", headers);
+      client.start();
+      const socket = await opened;
+      expect(openWebSocket).toHaveBeenCalledWith(socket.url, undefined, headers);
+      const init = fetch.mock.calls[0]?.[1];
+      expect(new Headers(init?.headers).get("X-Service-Token")).toBe(
+        headers?.["X-Service-Token"] ?? null,
+      );
+      client.stop();
+    },
+  );
 
   it("uses authenticated iOS MJPEG and forwards controls without a cross-origin video fetch", async () => {
     const { client, opened, events, fetch } = setup("ios");
@@ -406,7 +430,28 @@ function recoveryFixture(platform: "ios" | "android" = "ios", preferMjpeg = true
   const fetch = vi.fn((url: string, init: RequestInit) => {
     const signal = init.signal!;
     signals.push(signal);
-    if (!url.includes("stream.avcc")) return Promise.resolve(new Response("prime"));
+    if (!url.includes("stream.avcc"))
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(body) {
+              body.enqueue(
+                new Uint8Array([
+                  ...new TextEncoder().encode("--frame\r\nContent-Length: 5\r\n\r\n"),
+                  255,
+                  216,
+                  1,
+                  255,
+                  217,
+                ]),
+              );
+              signal.addEventListener("abort", () => body.error(new Error("aborted")), {
+                once: true,
+              });
+            },
+          }),
+        ),
+      );
     return Promise.resolve(
       new Response(
         new ReadableStream<Uint8Array>({
@@ -575,7 +620,7 @@ describe("shared device stream readiness and recovery", () => {
     const { client, events, image } = recoveryFixture();
     client.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(image.src).toContain("stream.mjpeg");
+    expect(image.src).toMatch(/^blob:/);
     expect(events.onStatus).not.toHaveBeenCalledWith("streaming", undefined);
     image.naturalWidth = 400;
     image.naturalHeight = 800;

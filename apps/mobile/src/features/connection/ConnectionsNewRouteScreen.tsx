@@ -20,6 +20,19 @@ import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { AppText as Text, AppTextInput, type AppTextInputProps } from "../../components/AppText";
+import { ErrorBanner } from "../../components/ErrorBanner";
+import {
+  EMPTY_SERVICE_AUTH_DRAFT,
+  EnvironmentServiceAuthFields,
+  serviceAuthFromDraft,
+  type EnvironmentServiceAuthDraft,
+} from "./EnvironmentServiceAuthFields";
+import {
+  removeServiceAuthForUrl,
+  setServiceAuthForUrl,
+  serviceAuthForUrl,
+  moveServiceAuth,
+} from "../../persistence/environment-service-auth";
 import { FrostedCutout } from "../../components/FrostedCutout";
 import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
 import {
@@ -61,6 +74,9 @@ export function ConnectionsNewRouteScreen({
   const insets = useSafeAreaInsets();
   const [hostInput, setHostInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
+  const [serviceAuth, setServiceAuth] =
+    useState<EnvironmentServiceAuthDraft>(EMPTY_SERVICE_AUTH_DRAFT);
+  const [serviceAuthError, setServiceAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const screenFocused = useIsFocused();
@@ -174,6 +190,7 @@ export function ConnectionsNewRouteScreen({
             navigation.goBack();
           }
         }
+        return result;
       } finally {
         setIsSubmitting(false);
       }
@@ -182,8 +199,31 @@ export function ConnectionsNewRouteScreen({
   );
 
   const handleSubmit = useCallback(async () => {
-    await connectAndClose(buildPairingUrl(hostInput, codeInput), false);
-  }, [codeInput, connectAndClose, hostInput]);
+    const pairingUrl = buildPairingUrl(hostInput, codeInput);
+    const previousAuth = serviceAuthForUrl(pairingUrl);
+    try {
+      const auth = serviceAuthFromDraft(serviceAuth);
+      if (auth === null) {
+        await removeServiceAuthForUrl(pairingUrl);
+      } else {
+        await setServiceAuthForUrl(pairingUrl, auth);
+      }
+      setServiceAuthError(null);
+    } catch (error) {
+      setServiceAuthError(
+        error instanceof Error ? error.message : "Could not save service authentication.",
+      );
+      return;
+    }
+    try {
+      const result = await connectAndClose(pairingUrl, false);
+      if (!AsyncResult.isSuccess(result))
+        await moveServiceAuth(pairingUrl, pairingUrl, previousAuth).catch(() => undefined);
+    } catch (cause) {
+      await moveServiceAuth(pairingUrl, pairingUrl, previousAuth).catch(() => undefined);
+      throw cause;
+    }
+  }, [codeInput, connectAndClose, hostInput, serviceAuth]);
 
   useEffect(() => {
     if (!shouldAutoConnect || attemptedAutoConnectRef.current === routePairingUrl) {
@@ -259,15 +299,13 @@ export function ConnectionsNewRouteScreen({
                 }}
               />
             </View>
-            <Text
-              accessibilityLiveRegion="polite"
-              className={cn(
-                "px-4 text-sm leading-normal",
-                pairingConnectionError ? "text-danger-foreground" : "text-foreground-muted",
-              )}
-            >
-              {pairingConnectionError ??
-                "For machines on your local network or tailnet. The machine keeps its own provider credentials."}
+            <EnvironmentServiceAuthFields value={serviceAuth} onChange={setServiceAuth} />
+            {serviceAuthError || pairingConnectionError ? (
+              <ErrorBanner message={serviceAuthError ?? pairingConnectionError ?? ""} />
+            ) : null}
+            <Text className="px-4 text-sm leading-normal text-foreground-muted">
+              For machines on your local network or tailnet. The machine keeps its own provider
+              credentials.
             </Text>
           </View>
 

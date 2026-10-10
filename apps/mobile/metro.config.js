@@ -117,8 +117,18 @@ async function prepareStreamScripts() {
         ["preview-stream.browser.ts"],
         generatePreviewStreamScript,
       ],
+      [
+        "apps/mobile/src/lib",
+        ["webview-network.browser.ts", "webview-network-protocol.ts"],
+        generateAll,
+      ],
+      ["packages/client-runtime/src", ["environmentNetwork.ts"], generateAll],
       // The preview transport also imports `hubAccess.ts`.
-      ["packages/client-runtime/src/device", ["stream.ts", "hubAccess.ts"], generateAll],
+      [
+        "packages/client-runtime/src/device",
+        ["stream.ts", "hubAccess.ts", "mjpeg.ts"],
+        generateAll,
+      ],
       [
         "packages/client-runtime/src/preview",
         ["serverBrowserStream.ts"],

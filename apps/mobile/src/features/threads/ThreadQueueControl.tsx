@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import { type StaticScreenProps, useNavigation } from "@react-navigation/native";
 import { useAtomValue } from "@effect/atom-react";
 import type { ChatAttachment, EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
@@ -568,7 +569,7 @@ function QueueAttachmentThumbnail(props: {
   }
   return (
     <Image
-      source={{ uri: url }}
+      source={environmentMediaSource(url)}
       contentFit="cover"
       style={{ width: 24, height: 24, borderRadius: 4 }}
       accessibilityIgnoresInvertColors

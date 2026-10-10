@@ -1,3 +1,4 @@
+import { environmentRequestOptions } from "../lib/environment-network";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import {
   clampFileAttachmentUploadBytes,
@@ -293,7 +294,10 @@ async function uploadFileBytes(
     const result = await file.upload(url, {
       httpMethod: "POST",
       uploadType: UploadType.BINARY_CONTENT,
-      headers: { "Content-Type": composerAttachmentWireMimeType(attachment) },
+      headers: {
+        ...environmentRequestOptions(url).headers,
+        "Content-Type": composerAttachmentWireMimeType(attachment),
+      },
       signal,
       ...(onProgress
         ? {

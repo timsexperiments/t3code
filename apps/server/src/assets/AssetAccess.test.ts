@@ -30,6 +30,7 @@ import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "../project/T3ProjectFileLoader.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { assetFileResponse } from "../http.ts";
+import { embeddedBrowserAsset } from "../preview/EmbeddedBrowserAsset.ts";
 import { ASSET_ROUTE_PREFIX, issueAssetUrl, resolveAsset } from "./AssetAccess.ts";
 import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { openMediaFile } from "./MediaFile.ts";
@@ -655,6 +656,25 @@ describe("AssetAccess", () => {
       expect(yield* resolveAsset(token, "../secret.txt")).toBeNull();
       expect(yield* resolveAsset(token, ".env")).toBeNull();
       expect(yield* resolveAsset(`${token}tampered`, "report.html")).toBeNull();
+      const embedded = yield* embeddedBrowserAsset(result.relativeUrl);
+      expect(embedded).not.toBeNull();
+      if (!embedded) return;
+      const css = yield* Effect.promise(() =>
+        embedded.load(new URL("report.css", embedded.url).href),
+      );
+      expect(css?.headers["Content-Type"]).toBe("text/css");
+      expect(new TextDecoder().decode(css?.body)).toBe("body { color: red; }");
+      for (const url of [
+        new URL(".env", embedded.url).href,
+        new URL("../secret.txt", embedded.url).href,
+        new URL(`/api/assets/${token}tampered/report.html`, embedded.url).href,
+        "http://127.0.0.1/private",
+        "https://example.com/private",
+      ])
+        expect(yield* Effect.promise(() => embedded.load(url))).toBeNull();
+      expect(yield* embeddedBrowserAsset("https://example.com/report.html")).toBeNull();
+      yield* TestClock.adjust("61 minutes");
+      expect(yield* Effect.promise(() => embedded.load(embedded.url))).toBeNull();
     }).pipe(Effect.provide(layerTest)),
   );
 

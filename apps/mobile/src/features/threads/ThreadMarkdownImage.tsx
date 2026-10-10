@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { createContext, useContext, useEffect, useId, useState } from "react";
 import {
@@ -154,7 +155,7 @@ function ThreadMarkdownImageRequest(props: {
   return (
     <>
       <Image
-        source={{ uri: props.uri }}
+        source={environmentMediaSource(props.uri)}
         resizeMode="contain"
         accessible={false}
         onLoad={(event) => {

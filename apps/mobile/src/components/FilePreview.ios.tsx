@@ -1,3 +1,4 @@
+import { environmentRequestOptions } from "../lib/environment-network";
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId } from "react";
 import { Alert } from "react-native";
@@ -10,6 +11,7 @@ const NativeControls = requireNativeModule<{
     name: string,
     sourceIdentifier: string,
     identifier: string,
+    headers: Readonly<Record<string, string>>,
   ): Promise<void>;
   dismissFile(identifier: string): Promise<void>;
 }>("T3NativeControls");
@@ -29,7 +31,13 @@ function NativeFilePreview(props: {
 
   useEffect(() => {
     let canceled = false;
-    void NativeControls.presentFile(uri, name ?? "Preview", sourceIdentifier ?? "", identifier)
+    void NativeControls.presentFile(
+      uri,
+      name ?? "Preview",
+      sourceIdentifier ?? "",
+      identifier,
+      environmentRequestOptions(uri).headers ?? {},
+    )
       .catch((error: unknown) => {
         if (!canceled) onOpenError(error);
       })
