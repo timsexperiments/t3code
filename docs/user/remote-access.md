@@ -71,11 +71,14 @@ Values stay in secure storage on this device and apply only to the configured
 HTTPS origin, including its port. Requests to other environment origins receive no added headers.
 `Authorization` and `DPoP` are reserved for T3 Code. Pair with T3 Code as usual.
 
-Headers also apply to browser and device preview streams. Mobile HTML pages and
-MCP apps render in the environment’s browser, so their signed resources load on
-the host. Update the host and mobile app together. Embedded page audio, phone
-sensors, and DOM accessibility are not forwarded by the browser stream. Links
-opened in an external browser need separate proxy authentication.
+Headers also apply to browser and device preview streams. Agent-generated HTML
+pages render on the phone and load their document with these headers. External
+resources referenced by those pages do not inherit the headers.
+
+HTML file previews and MCP apps render in the environment's browser. Update the
+host and mobile app together for these previews. Browser streams do not forward
+audio, phone sensors, or DOM accessibility. Links opened in an external browser
+need separate proxy authentication.
 
 ### Reach one machine several ways
 
