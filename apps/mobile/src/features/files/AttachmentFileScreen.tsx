@@ -23,7 +23,7 @@ import { FilePreviewLoading, FilePreviewNotice } from "./FilePreviewFeedback";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { SourceFileSurface } from "./SourceFileSurface";
-import { HtmlRenderWebView } from "../threads/HtmlRenderWebView";
+import { HtmlRenderWebView, HtmlFileWebView } from "../threads/HtmlRenderWebView";
 
 /**
  * Both the thread stack and the new-task sheet stack register this screen, so a chip in a
@@ -53,6 +53,7 @@ function nativeViewerKind(kind: ReturnType<typeof useAttachmentDocument>["kind"]
 }
 
 function AttachmentDocumentBody(props: {
+  readonly htmlRender: boolean;
   readonly document: ReturnType<typeof useAttachmentDocument>;
   readonly name: string;
   readonly environmentId: EnvironmentId | null;
@@ -143,8 +144,9 @@ function AttachmentDocumentBody(props: {
     return <AudioFilePreview key={document.revision} uri={document.uri} onRetry={document.retry} />;
   }
   if (document.kind === "html" && props.environmentId !== null) {
+    const HtmlView = props.htmlRender ? HtmlRenderWebView : HtmlFileWebView;
     return (
-      <HtmlRenderWebView
+      <HtmlView
         environmentId={props.environmentId}
         key={document.uri}
         uri={document.uri}
@@ -414,6 +416,7 @@ export function AttachmentFileScreen(props: AttachmentFileScreenProps) {
         </NativeHeaderToolbar.Menu>
       </NativeHeaderToolbar>
       <AttachmentDocumentBody
+        htmlRender={params.htmlRender === "1"}
         document={document}
         name={params.name}
         environmentId={environmentId}

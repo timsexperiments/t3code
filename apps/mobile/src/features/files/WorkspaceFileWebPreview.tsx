@@ -1,5 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { HtmlRenderWebView } from "../threads/HtmlRenderWebView";
+import { HtmlFileWebView } from "../threads/HtmlRenderWebView";
 import { environmentMediaSource } from "../../lib/environment-network";
 import { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -22,7 +22,7 @@ export function WorkspaceFileWebPreview(props: {
 
   if (/\.html?(?:$|[?#])/i.test(props.uri)) {
     return (
-      <HtmlRenderWebView
+      <HtmlFileWebView
         environmentId={props.environmentId}
         uri={props.uri}
         title="File preview"
