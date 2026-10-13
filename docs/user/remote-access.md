@@ -72,11 +72,12 @@ HTTPS origin, including its port. Requests to other environment origins receive 
 `Authorization` and `DPoP` are reserved for T3 Code. Pair with T3 Code as usual.
 
 Headers also apply to browser and device preview streams. Agent-generated HTML
-pages render on the phone and load their document with these headers. External
-resources referenced by those pages do not inherit the headers.
+pages and MCP apps render on the phone and load their documents with these headers.
+External resources referenced by those documents do not inherit the headers.
+MCP tool calls and resource reads use the authenticated environment connection.
 
-HTML file previews and MCP apps render in the environment's browser. Update the
-host and mobile app together for these previews. Browser streams do not forward
+HTML file previews render in the environment's browser. Update the host and
+mobile app together for these previews. Browser streams do not forward
 audio, phone sensors, or DOM accessibility. Links opened in an external browser
 need separate proxy authentication.
 
