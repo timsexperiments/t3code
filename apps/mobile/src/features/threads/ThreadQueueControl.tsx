@@ -1,4 +1,3 @@
-import { environmentMediaSource } from "../../lib/environment-network";
 import { type StaticScreenProps, useNavigation } from "@react-navigation/native";
 import { useAtomValue } from "@effect/atom-react";
 import type { ChatAttachment, EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
@@ -24,6 +23,7 @@ import { scopedThreadKey } from "../../lib/scopedEntities";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { NativeStackScreenOptions, nativeHeaderScrollEdgeEffects } from "../../native/StackHeader";
 import { useAssetUrl } from "../../state/assets";
+import { assetImageSource } from "../../lib/assetImageSource";
 import { beginQueuedRunEdit, useQueuedRunEdit } from "../../state/queued-run-edit";
 import { environmentThreadDetails, threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -564,19 +564,21 @@ function QueueAttachmentThumbnail(props: {
   readonly environmentId: EnvironmentId;
   readonly attachment: ChatAttachment;
 }) {
-  const url = useAssetUrl(props.environmentId, {
+  const resource = {
     _tag: "attachment",
     attachmentId: props.attachment.id,
     fileName: props.attachment.name,
     mimeType: props.attachment.mimeType,
     disposition: "inline",
-  });
+  } as const;
+  const url = useAssetUrl(props.environmentId, resource);
   if (url === null) {
     return <View className="h-6 w-6 rounded bg-subtle" />;
   }
   return (
     <Image
-      source={environmentMediaSource(url)}
+      source={assetImageSource(props.environmentId, resource, url)}
+      cachePolicy="memory-disk"
       contentFit="cover"
       style={{ width: 24, height: 24, borderRadius: 4 }}
       accessibilityIgnoresInvertColors
