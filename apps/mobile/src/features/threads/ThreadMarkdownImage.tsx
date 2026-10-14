@@ -1,4 +1,5 @@
 import { environmentMediaSource } from "../../lib/environment-network";
+import { MISSING_FILE_ACCESS_MESSAGE } from "@t3tools/client-runtime/state/assets";
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { Image } from "expo-image";
 import { createContext, useContext, useEffect, useEffectEvent, useId, useState } from "react";
@@ -36,6 +37,8 @@ export function ThreadMarkdownImageView(props: {
   readonly uri: string | null;
   readonly sourceKey: string;
   readonly unavailable: boolean;
+  /** Why the image is unavailable, when the cause is known. */
+  readonly unavailableDetail?: string | undefined;
   readonly alt: string | null;
   /** Pixel size from the server, when it could read the header; the frame is final from the first render. */
   readonly knownSize?: { readonly width: number; readonly height: number } | undefined;
@@ -96,7 +99,11 @@ export function ThreadMarkdownImageView(props: {
             style={frameStyle}
           >
             {failed ? (
-              <Text className="text-xs text-foreground-muted">Image unavailable</Text>
+              <Text className="px-3 text-center text-xs text-foreground-muted">
+                {props.unavailableDetail
+                  ? `Image unavailable. ${props.unavailableDetail}`
+                  : "Image unavailable"}
+              </Text>
             ) : (
               <AppActivityIndicator />
             )}
@@ -262,6 +269,11 @@ export function ThreadMarkdownImage(props: {
             : `workspace:${props.resource.path}`
       }
       unavailable={assetUrl._tag === "Failure"}
+      unavailableDetail={
+        assetUrl._tag === "Failure" && assetUrl.reason === "missing-file-access"
+          ? MISSING_FILE_ACCESS_MESSAGE
+          : undefined
+      }
       knownSize={assetUrl._tag === "Success" ? assetUrl.imageDimensions : undefined}
       format={
         (props.resource._tag === "media-file" || props.resource._tag === "draft-workspace-file") &&
