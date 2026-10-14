@@ -4,12 +4,9 @@ import type {
   EnvironmentNetwork,
   EnvironmentWebSocket,
 } from "@t3tools/client-runtime/environment-network";
-import {
-  NetworkRequest,
-  encodeNetworkBytes,
-  decodeNetworkBytes,
-  type NetworkReply,
-} from "./webview-network-protocol";
+import { NetworkRequest, type NetworkReply } from "./webview-network-protocol";
+
+import { encodeNetworkBytes, decodeNetworkBytes } from "./webview-network-bytes";
 
 const decodeRequest = Schema.decodeUnknownOption(NetworkRequest);
 const requestOrigin = (url: string) => new URL(url.replace(/^ws/i, "http")).origin;

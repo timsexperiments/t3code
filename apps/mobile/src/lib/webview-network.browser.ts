@@ -2,12 +2,8 @@ import type {
   EnvironmentNetwork,
   EnvironmentWebSocket,
 } from "@t3tools/client-runtime/environment-network";
-import {
-  decodeNetworkBytes,
-  encodeNetworkBytes,
-  type NetworkRequest,
-  type NetworkReply,
-} from "./webview-network-protocol";
+import { decodeNetworkBytes, encodeNetworkBytes } from "./webview-network-bytes";
+import type { NetworkRequest, NetworkReply } from "./webview-network-protocol";
 
 declare global {
   interface Window {
