@@ -1,3 +1,4 @@
+import { install } from "../features/threads/html-network.browser";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createEnvironmentNetwork,
@@ -31,7 +32,7 @@ class TestSocket extends EventTarget implements EnvironmentWebSocket {
   }
 }
 
-function setup(headers?: EnvironmentHeaders) {
+function setup(headers?: EnvironmentHeaders, scope: "environment" | "assets" = "environment") {
   const cancel = vi.fn();
   let body: ReadableStreamDefaultController<Uint8Array> | undefined;
   const fetch = vi.fn<typeof globalThis.fetch>(
@@ -56,7 +57,12 @@ function setup(headers?: EnvironmentHeaders) {
   const send = vi.fn<(reply: NetworkReply) => void>((reply) =>
     window.T3EnvironmentNetworkReceive(reply),
   );
-  const host = createWebViewNetworkHost({ origin: "https://environment.test", network, send });
+  const host = createWebViewNetworkHost({
+    origin: "https://environment.test",
+    scope,
+    network,
+    send,
+  });
   const postMessage = vi.fn((data: string) => host.receive(data));
   vi.stubGlobal("window", { ReactNativeWebView: { postMessage } });
   const client = createWebViewEnvironmentNetwork();
@@ -196,6 +202,71 @@ describe("WebView environment transport", () => {
     );
     expect(host.receive("not JSON")).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
+    host.dispose();
+  });
+});
+
+describe("HTML asset scope", () => {
+  it("uses environment headers for asset reads without cookies or redirects", async () => {
+    const { client, host, fetch, end } = setup({ "X-Service-Token": "test-service" }, "assets");
+    const response = await client.fetch("https://environment.test/api/assets/signed/image.svg");
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        credentials: "omit",
+        redirect: "error",
+      }),
+    );
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("X-Service-Token")).toBe(
+      "test-service",
+    );
+    end();
+    host.dispose();
+  });
+
+  it("rejects API reads and sockets even when posted directly to native", async () => {
+    const { client, host, fetch, openWebSocket } = setup(undefined, "assets");
+    await expect(client.fetch("https://environment.test/api/auth/session")).rejects.toThrow(
+      "Only signed asset requests",
+    );
+    client.openWebSocket("wss://environment.test/ws");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(openWebSocket).not.toHaveBeenCalled();
+    host.dispose();
+  });
+});
+
+describe("prepended HTML fetch transport", () => {
+  it("resolves relative signed assets and authenticates through native", async () => {
+    const { host, fetch } = setup({ "X-Service-Token": "test-service" }, "assets");
+    const browserFetch = vi.fn<typeof globalThis.fetch>(async () => new Response("browser"));
+    window.fetch = browserFetch;
+    install("https://environment.test/api/assets/signed/page.html");
+    const response = await window.fetch("./image.svg");
+    expect(response.status).toBe(200);
+    expect(fetch.mock.calls[0]?.[0]).toBe("https://environment.test/api/assets/signed/image.svg");
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("X-Service-Token")).toBe(
+      "test-service",
+    );
+    expect(browserFetch).not.toHaveBeenCalled();
+    host.dispose();
+  });
+
+  it("preserves browser requests outside asset reads", async () => {
+    const { host, fetch } = setup({ "X-Service-Token": "test-service" }, "assets");
+    const browserFetch = vi.fn<typeof globalThis.fetch>(async () => new Response("browser"));
+    window.fetch = browserFetch;
+    install("https://environment.test/api/assets/signed/page.html");
+    await window.fetch("https://other.test/api/assets/image.svg");
+    await window.fetch("./image.svg", { method: "POST", body: "original body" });
+    expect(fetch).not.toHaveBeenCalled();
+    const input = browserFetch.mock.calls[1]?.[0];
+    expect(input).toBeInstanceOf(Request);
+    if (!(input instanceof Request)) throw new Error("Missing browser request");
+    expect(input.method).toBe("POST");
+    expect(await input.text()).toBe("original body");
+    expect(input.headers.has("X-Service-Token")).toBe(false);
     host.dispose();
   });
 });

@@ -6,11 +6,13 @@ import { createWebViewNetworkHost } from "./webview-network-host";
 export function useWebViewEnvironmentNetwork(
   view: RefObject<WebView<object> | null>,
   origin: string,
+  scope: "environment" | "assets" = "environment",
 ) {
   const host = useRef<ReturnType<typeof createWebViewNetworkHost> | null>(null);
   useLayoutEffect(() => {
     const network = createWebViewNetworkHost({
       origin,
+      scope,
       network: environmentNetwork,
       send: (reply) =>
         view.current?.injectJavaScript(
@@ -22,7 +24,7 @@ export function useWebViewEnvironmentNetwork(
       network.dispose();
       host.current = null;
     };
-  }, [origin, view]);
+  }, [origin, scope, view]);
   return useMemo(
     () => ({
       receive: (data: string) => host.current?.receive(data) ?? false,

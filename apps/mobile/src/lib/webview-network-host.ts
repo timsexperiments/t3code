@@ -16,6 +16,7 @@ const requestOrigin = (url: string) => new URL(url.replace(/^ws/i, "http")).orig
 
 export function createWebViewNetworkHost(options: {
   readonly origin: string;
+  readonly scope?: "environment" | "assets";
   readonly network: Pick<EnvironmentNetwork, "fetch" | "openWebSocket">;
   readonly send: (reply: NetworkReply) => void;
 }) {
@@ -45,6 +46,11 @@ export function createWebViewNetworkHost(options: {
         case "fetch": {
           if (requestOrigin(message.url) !== origin)
             throw new Error("Request is outside this environment.");
+          if (
+            options.scope === "assets" &&
+            !new URL(message.url).pathname.startsWith("/api/assets/")
+          )
+            throw new Error("Only signed asset requests are available to this document.");
           if (requests.has(id) || sockets.has(id))
             throw new Error("Request identifier is already active.");
           const request: {
@@ -55,7 +61,8 @@ export function createWebViewNetworkHost(options: {
           const response = await options.network.fetch(message.url, {
             method: message.method,
             signal: request.controller.signal,
-            credentials: message.credentials,
+            credentials: options.scope === "assets" ? "omit" : message.credentials,
+            ...(options.scope === "assets" ? { redirect: "error" as const } : {}),
             headers: message.headers,
           });
           if (requests.get(id) !== request) {
@@ -85,6 +92,8 @@ export function createWebViewNetworkHost(options: {
           return;
         }
         case "socket": {
+          if (options.scope === "assets")
+            throw new Error("Sockets are unavailable to this document.");
           if (requestOrigin(message.url) !== origin)
             throw new Error("Socket is outside this environment.");
           if (requests.has(id) || sockets.has(id))

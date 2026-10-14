@@ -1,3 +1,6 @@
+import htmlNetworkScript from "@t3tools/mobile-html-network";
+import { prependHtmlNetwork } from "../../lib/htmlNetworkDocument";
+import { useWebViewEnvironmentNetwork } from "../../lib/use-webview-environment-network";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
@@ -102,6 +105,7 @@ export function HtmlRenderWebView(props: {
   const [loaded, setLoaded] = useState(false);
   const [overflow, setOverflow] = useState(NO_OVERFLOW);
   const webView = useRef<WebView<object>>(null);
+  const network = useWebViewEnvironmentNetwork(webView, `${props.uri}#${generation}`, "assets");
   const crashes = useRef(0);
   // The theme the loaded document shows; null until it loads.
   const shownTheme = useRef<HtmlRenderTheme | null>(null);
@@ -130,7 +134,7 @@ export function HtmlRenderWebView(props: {
     () =>
       document?.uri === props.uri
         ? {
-            html: document.html,
+            html: prependHtmlNetwork(document.html, htmlNetworkScript, props.uri),
             baseUrl: props.uri + htmlRenderThemeFragment(initialTheme),
           }
         : null,
@@ -208,15 +212,13 @@ export function HtmlRenderWebView(props: {
           onHttpError={props.onLoadError}
           onContentProcessDidTerminate={restart}
           onRenderProcessGone={restart}
-          {...(props.nested
-            ? {
-                injectedJavaScript: OVERFLOW_SCRIPT,
-                onMessage: (event: WebViewMessageEvent) => {
-                  const next = readOverflowMessage(event.nativeEvent.data);
-                  if (next !== null) setOverflow(next);
-                },
-              }
-            : {})}
+          onMessage={(event: WebViewMessageEvent) => {
+            if (network.receive(event.nativeEvent.data)) return;
+            if (!props.nested) return;
+            const next = readOverflowMessage(event.nativeEvent.data);
+            if (next !== null) setOverflow(next);
+          }}
+          {...(props.nested ? { injectedJavaScript: OVERFLOW_SCRIPT } : {})}
         />
       ) : null}
       {loaded ? null : (

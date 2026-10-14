@@ -73,7 +73,8 @@ HTTPS origin, including its port. Requests to other environment origins receive 
 
 Headers also apply to browser and device preview streams. Agent-generated HTML
 pages and MCP apps render on the phone and load their documents with these headers.
-External resources referenced by those documents do not inherit the headers.
+Generated HTML can fetch signed assets from its environment with these headers.
+Direct image, stylesheet, and script URLs do not inherit the headers.
 MCP tool calls and resource reads use the authenticated environment connection.
 
 HTML file previews render in the environment's browser. Update the host and
