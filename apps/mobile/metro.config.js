@@ -135,13 +135,13 @@ async function prepareStreamScripts() {
         ["stream.ts", "hubAccess.ts", "mjpeg.ts"],
         generateAll,
       ],
+
       [
         "packages/client-runtime/src/preview",
         ["serverBrowserStream.ts"],
         generatePreviewStreamScript,
       ],
     ]) {
-      // The generated modules participate in Metro's normal Fast Refresh.
       fs.watch(path.join(workspaceRoot, directory), { persistent: false }, (_event, filename) => {
         if (filename && !files.includes(String(filename))) return;
         rebuild = rebuild

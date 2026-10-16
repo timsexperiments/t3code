@@ -8,6 +8,7 @@ const mobileRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(impor
 /** Metro embeds each shared browser transport as a small script in a native WebView. */
 async function generateWebViewScript(options: { feature: string; stem: string; name: string }) {
   const { feature, stem, name } = options;
+
   const result = await build({
     configFile: false,
     logLevel: "silent",

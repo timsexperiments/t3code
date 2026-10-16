@@ -1,7 +1,8 @@
 import { environmentRequestOptions } from "../lib/environment-network";
+import * as Dialog from "./ui/Dialog";
+
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId } from "react";
-import { Alert } from "react-native";
 
 import type { ResolvedFilePreviewSource } from "./FilePreviewModal.types";
 
@@ -33,7 +34,7 @@ function NativeFilePreview(props: {
   const onRequestClose = useEffectEvent(props.onRequestClose);
   const onOpenError = useEffectEvent((error: unknown) => {
     if (props.onOpenError) props.onOpenError(error);
-    else Alert.alert("Could not open preview", "The file could not be loaded. Please try again.");
+    else Dialog.alert("Could not open preview", "The file could not be loaded. Please try again.");
   });
 
   useEffect(() => {
