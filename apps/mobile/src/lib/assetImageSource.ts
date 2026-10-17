@@ -1,5 +1,6 @@
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import type { ImageSource } from "expo-image";
+import { environmentMediaSource } from "./environment-network";
 
 /**
  * Every mint signs a new URL, and a reconnect mints again, so a URL-keyed cache
@@ -13,8 +14,8 @@ export function assetImageSource(
 ): ImageSource {
   return resource._tag === "attachment"
     ? {
-        uri,
+        ...environmentMediaSource(uri),
         cacheKey: `t3-attachment:${JSON.stringify([environmentId, resource.attachmentId])}`,
       }
-    : { uri };
+    : environmentMediaSource(uri);
 }

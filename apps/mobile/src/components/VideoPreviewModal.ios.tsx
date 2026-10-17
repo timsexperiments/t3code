@@ -1,4 +1,6 @@
+import { environmentRequestOptions } from "../lib/environment-network";
 import * as Dialog from "./ui/Dialog";
+
 import { useIsFocused } from "@react-navigation/native";
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId, useState } from "react";
@@ -18,6 +20,7 @@ const NativeControls = requireNativeModule<{
     title: string,
     sourceIdentifier: string,
     identifier: string,
+    headers: Readonly<Record<string, string>>,
   ): Promise<void>;
   dismissVideo(identifier: string): Promise<void>;
 }>("T3NativeControls");
@@ -84,6 +87,7 @@ function NativeVideoPreview(props: {
           name,
           source.sourceIdentifier ?? "",
           identifier,
+          environmentRequestOptions(file?.uri ?? playbackUrl!).headers ?? {},
         );
         if (!controller.signal.aborted) onRequestClose();
       } finally {

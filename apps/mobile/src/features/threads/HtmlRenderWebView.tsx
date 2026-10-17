@@ -1,20 +1,30 @@
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { useNavigation } from "@react-navigation/native";
+import htmlNetworkScript from "@t3tools/mobile-html-network";
+import { prependHtmlNetwork } from "../../lib/htmlNetworkDocument";
+import { useWebViewEnvironmentNetwork } from "../../lib/use-webview-environment-network";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
+
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
   htmlRenderFileName,
   htmlRenderFrameHeight,
   htmlRenderThemeFragment,
   htmlRenderThemeMessage,
+  readHtmlRenderLinkRequest,
+  htmlRenderResult,
   type HtmlRenderReference,
   type HtmlRenderTheme,
 } from "@t3tools/shared/htmlRender";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, View, type ColorValue } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
+import { PreviewStreamWebView, type PreviewStreamRef } from "../browser/PreviewStreamWebView";
+import { environmentFetch } from "../../lib/environment-network";
+
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+
 import { mobileHtmlRenderTheme } from "../../lib/htmlRenderTheme";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { useAssetUrlState, useRefreshAssetUrl } from "../../state/assets";
@@ -78,6 +88,7 @@ function readOverflowMessage(data: string): Overflow | null {
 const withoutFragment = (url: string) => url.split("#", 1)[0];
 
 export function HtmlRenderWebView(props: {
+  readonly environmentId: EnvironmentId;
   readonly uri: string;
   readonly title: string;
   readonly nested: boolean;
@@ -89,11 +100,39 @@ export function HtmlRenderWebView(props: {
   const [loaded, setLoaded] = useState(false);
   const [overflow, setOverflow] = useState(NO_OVERFLOW);
   const webView = useRef<WebView<object>>(null);
+  const network = useWebViewEnvironmentNetwork(webView, `${props.uri}#${generation}`, "assets");
   const crashes = useRef(0);
   const shownTheme = useRef<HtmlRenderTheme | null>(null);
+  const onDocumentError = useEffectEvent(() => props.onLoadError?.());
+  const [document, setDocument] = useState<{
+    uri: string;
+    html: string;
+  } | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void environmentFetch(props.uri, {
+      signal: controller.signal,
+      redirect: "error",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTML request failed: ${response.status}`);
+        const html = await response.text();
+        if (!controller.signal.aborted) setDocument({ uri: props.uri, html });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) onDocumentError();
+      });
+    return () => controller.abort();
+  }, [props.uri]);
   const source = useMemo(
-    () => ({ uri: props.uri + htmlRenderThemeFragment(initialTheme) }),
-    [props.uri, initialTheme],
+    () =>
+      document?.uri === props.uri
+        ? {
+            html: prependHtmlNetwork(document.html, htmlNetworkScript, props.uri),
+            baseUrl: props.uri + htmlRenderThemeFragment(initialTheme),
+          }
+        : null,
+    [document, props.uri, initialTheme],
   );
   useEffect(() => {
     if (shownTheme.current === null || shownTheme.current === theme) return;
@@ -124,50 +163,56 @@ export function HtmlRenderWebView(props: {
             }
       }
     >
-      <WebView<object>
-        key={generation}
-        ref={webView}
-        source={source}
-        accessibilityLabel={props.title}
-        style={{ flex: 1, backgroundColor: "transparent" }}
-        allowsInlineMediaPlayback
-        automaticallyAdjustContentInsets={!props.nested}
-        bounces={!props.nested}
-        showsVerticalScrollIndicator={!props.nested}
-        showsHorizontalScrollIndicator={!props.nested}
-        scrollEnabled={scrollable}
-        // Android only: the page holds vertical drags until it reaches an edge,
-        // then hands them to the feed (patches/react-native-webview). A page
-        // that only overflows sideways leaves vertical drags to the feed.
-        nestedScrollEnabled={props.nested && overflow.y}
-        overScrollMode={props.nested ? "never" : "always"}
-        onShouldStartLoadWithRequest={(request) =>
-          request.isTopFrame === false ||
-          withoutFragment(request.url) === withoutFragment(props.uri)
-        }
-        onOpenWindow={(event) => {
-          const url = event.nativeEvent.targetUrl;
-          if (/^https?:/i.test(url)) void tryOpenExternalUrl(url, "html-render");
-        }}
-        onLoadEnd={() => {
-          setLoaded(true);
-          shownTheme.current = theme;
-          if (theme !== initialTheme) postTheme(webView.current, theme);
-        }}
-        onError={props.onLoadError}
-        onHttpError={props.onLoadError}
-        onContentProcessDidTerminate={restart}
-        onRenderProcessGone={restart}
-        {...(props.nested
-          ? {
-              injectedJavaScript: OVERFLOW_SCRIPT,
-              onMessage: (event: WebViewMessageEvent) => {
-                const next = readOverflowMessage(event.nativeEvent.data);
-                if (next !== null) setOverflow(next);
-              },
-            }
-          : {})}
-      />
+      {source !== null ? (
+        <WebView<object>
+          key={generation}
+          ref={webView}
+          source={source}
+          originWhitelist={["*"]}
+          accessibilityLabel={props.title}
+          style={{ flex: 1, backgroundColor: "transparent" }}
+          allowsInlineMediaPlayback
+          automaticallyAdjustContentInsets={!props.nested}
+          bounces={!props.nested}
+          showsVerticalScrollIndicator={!props.nested}
+          showsHorizontalScrollIndicator={!props.nested}
+          scrollEnabled={scrollable}
+          // Android only: the page holds vertical drags until it reaches an edge,
+          // then hands them to the feed (patches/react-native-webview). A page
+          // that only overflows sideways leaves vertical drags to the feed.
+          nestedScrollEnabled={props.nested && overflow.y}
+          overScrollMode={props.nested ? "never" : "always"}
+          // Only the page itself loads here; other top-frame navigations are
+          // dropped. A link the reader taps opens as a new window, which the
+          // platform allows only from a tap, and goes to the browser.
+          onShouldStartLoadWithRequest={(request) =>
+            request.isTopFrame === false ||
+            request.url === "about:blank" ||
+            withoutFragment(request.url) === withoutFragment(props.uri)
+          }
+          onOpenWindow={(event) => {
+            const url = event.nativeEvent.targetUrl;
+            if (/^https?:/i.test(url)) void tryOpenExternalUrl(url, "html-render");
+          }}
+          onLoadEnd={() => {
+            setLoaded(true);
+            shownTheme.current = theme;
+            if (theme !== initialTheme) postTheme(webView.current, theme);
+          }}
+          onError={props.onLoadError}
+          onHttpError={props.onLoadError}
+          onContentProcessDidTerminate={restart}
+          onRenderProcessGone={restart}
+          onMessage={(event: WebViewMessageEvent) => {
+            if (network.receive(event.nativeEvent.data)) return;
+            if (!props.nested) return;
+            const next = readOverflowMessage(event.nativeEvent.data);
+            if (next !== null) setOverflow(next);
+          }}
+          {...(props.nested ? { injectedJavaScript: OVERFLOW_SCRIPT } : {})}
+        />
+      ) : null}
+
       {loaded ? null : (
         <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
           <AppActivityIndicator />
@@ -176,6 +221,71 @@ export function HtmlRenderWebView(props: {
     </View>
   );
 }
+
+/** A captured page rendered by its environment's browser. */
+export function HtmlFileWebView(props: {
+  readonly environmentId: EnvironmentId;
+  readonly uri: string;
+  readonly title: string;
+  readonly nested: boolean;
+  readonly onLoadError?: () => void;
+}) {
+  const focused = useIsFocused();
+  const theme = useHtmlRenderTheme();
+  const [initialTheme] = useState(theme);
+  const stream = useRef<PreviewStreamRef>(null);
+  useEffect(() => {
+    stream.current?.command({
+      type: "embeddedMessage",
+      message: htmlRenderThemeMessage(theme),
+    });
+  }, [theme]);
+  return (
+    <View
+      style={
+        props.nested
+          ? { flex: 1 }
+          : {
+              flex: 1,
+              paddingHorizontal: FULL_SCREEN_GUTTER,
+              backgroundColor: theme.variables["--background"],
+            }
+      }
+    >
+      <PreviewStreamWebView
+        ref={stream}
+        environmentId={props.environmentId}
+        threadId="embedded"
+        tabId="embedded"
+        embeddedType="html"
+        embeddedAsset={props.uri + htmlRenderThemeFragment(initialTheme)}
+        paused={!focused}
+        interactive
+        background={theme.variables["--background"] ?? "transparent"}
+        onGone={props.onLoadError}
+        onEmbeddedMessage={(message) => {
+          const link = readHtmlRenderLinkRequest(message);
+          if (!link) return;
+          void tryOpenExternalUrl(link.url, "html-render").finally(() => {
+            stream.current?.command({
+              type: "embeddedMessage",
+              message: htmlRenderResult(link.id),
+            });
+          });
+        }}
+        onStreamingChange={(streaming) => {
+          if (streaming)
+            stream.current?.command({
+              type: "embeddedMessage",
+              message: htmlRenderThemeMessage(theme),
+            });
+        }}
+      />
+    </View>
+  );
+}
+
+/** A completed `html_render` call in the thread feed: the page itself, at a fixed height. */
 
 export function ThreadHtmlRender(props: {
   readonly environmentId: EnvironmentId;
@@ -225,6 +335,7 @@ export function ThreadHtmlRender(props: {
         {uri !== null && !failed ? (
           <HtmlRenderWebView
             key={`${uri}:${attempt}`}
+            environmentId={props.environmentId}
             uri={uri}
             title={title}
             nested

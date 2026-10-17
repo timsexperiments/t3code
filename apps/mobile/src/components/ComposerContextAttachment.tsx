@@ -1,4 +1,6 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import * as Dialog from "./ui/Dialog";
+
 import type { ComposerContextRecord, EnvironmentId } from "@t3tools/contracts";
 import { Pressable, View } from "react-native";
 import { Image } from "expo-image";
@@ -102,7 +104,7 @@ export function ComposerContextAttachment(props: {
           <Image
             source={
               remoteEnvironmentId === null
-                ? { uri }
+                ? environmentMediaSource(uri)
                 : assetImageSource(remoteEnvironmentId, resource, uri)
             }
             style={{ width: "100%", height: 280 }}

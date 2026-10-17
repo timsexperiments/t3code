@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { createContext, useContext, useState, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
@@ -55,7 +56,7 @@ export function MediaImagePreview(props: MediaImagePreviewProps) {
   return (
     <ImagePreviewContext value={context}>
       <ImageViewing
-        images={gallery.map((item) => ({ uri: item.uri }))}
+        images={gallery.map((item) => environmentMediaSource(item.uri))}
         imageIndex={index}
         onImageIndexChange={setIndex}
         visible

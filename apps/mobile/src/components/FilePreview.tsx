@@ -1,4 +1,6 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import * as Dialog from "./ui/Dialog";
+
 import { useEffect, useEffectEvent } from "react";
 import { Modal, Pressable, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
@@ -76,7 +78,9 @@ export function FilePreview(props: {
   return (
     <ImageViewing
       images={
-        props.source.gallery?.map((item) => ({ uri: item.uri })) ?? [{ uri: props.source.uri }]
+        props.source.gallery?.map((item) => environmentMediaSource(item.uri)) ?? [
+          environmentMediaSource(props.source.uri),
+        ]
       }
       imageIndex={Math.max(
         0,

@@ -1,3 +1,8 @@
+import {
+  browserEnvironmentNetwork,
+  type EnvironmentNetwork,
+  type EnvironmentWebSocket,
+} from "../environmentNetwork.ts";
 // @effect-diagnostics globalTimers:off globalFetch:off - This browser and WebView transport runs without an Effect runtime.
 import { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts";
 import {
@@ -51,6 +56,7 @@ const isPreviewStreamDialog = (value: unknown): value is PreviewStreamControl["d
 
 /** Coordinates are page CSS px. */
 export type PreviewStreamInput =
+  | { readonly type: "embeddedMessage"; readonly message: unknown }
   | { readonly type: "takeControl" }
   | { readonly type: "releaseControl" }
   | { readonly type: "dialog"; readonly accept: boolean; readonly promptText?: string }
@@ -123,10 +129,11 @@ const previewStreamUploadUrl = (
 export async function uploadPreviewStreamFiles(
   chooser: PreviewStreamFileChooser,
   files: ReadonlyArray<Blob & { readonly name?: string }>,
+  network: Pick<EnvironmentNetwork, "fetch"> = browserEnvironmentNetwork,
 ): Promise<void> {
   const body = new FormData();
   for (const file of files) body.append("file", file, file.name ?? "file");
-  const response = await fetch(chooser.uploadUrl, {
+  const response = await network.fetch(chooser.uploadUrl, {
     method: "POST",
     body,
     credentials: chooser.credentials ? "include" : "omit",
@@ -172,6 +179,8 @@ export const previewStreamModifiers = (event: {
   (event.shiftKey ? 8 : 0);
 
 export interface PreviewStreamTarget {
+  readonly embeddedAsset?: string;
+  readonly embeddedType?: "html" | "mcp";
   readonly access: DeviceHubAccess;
   readonly threadId: string;
   readonly tabId: string;
@@ -183,6 +192,9 @@ export interface PreviewStreamTarget {
 }
 
 export interface PreviewStreamEvents {
+  readonly onEmbeddedMessage?: (message: unknown) => void;
+  /** One complete JPEG frame. */
+
   readonly onFrame: (jpeg: ArrayBuffer) => void;
   readonly onViewport: (viewport: PreviewStreamViewport) => void;
   readonly onProbe?: (probe: PreviewStreamProbe) => void;
@@ -208,6 +220,7 @@ const ACK_MESSAGE = JSON.stringify({ type: "ack" });
 export function createPreviewStreamClient(
   target: PreviewStreamTarget,
   events: PreviewStreamEvents,
+  network: Pick<EnvironmentNetwork, "openWebSocket"> = browserEnvironmentNetwork,
 ): PreviewStreamClient {
   const query = new URLSearchParams({
     threadId: target.threadId,
@@ -216,9 +229,14 @@ export function createPreviewStreamClient(
     maxHeight: String(Math.max(1, Math.round(target.maxHeight))),
   });
   if (target.interactive === false) query.set("interactive", "false");
+  if (target.embeddedAsset !== undefined) {
+    query.set("embeddedAsset", target.embeddedAsset);
+    if (target.embeddedType !== undefined) query.set("embeddedType", target.embeddedType);
+  }
   const url = withDeviceHubQuery(`${target.access.wsBase}/ws?${query.toString()}`, target.access);
+  let assetTarget = target;
   let stopped = false;
-  let socket: WebSocket | null = null;
+  let socket: EnvironmentWebSocket | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let failures = 0;
   let control: PreviewStreamControl | null = null;
@@ -226,7 +244,7 @@ export function createPreviewStreamClient(
 
   const connect = () => {
     if (stopped) return;
-    const ws = new WebSocket(url);
+    const ws = network.openWebSocket(url);
     ws.binaryType = "arraybuffer";
     socket = ws;
     let opened = false;
@@ -272,7 +290,9 @@ export function createPreviewStreamClient(
         sequence,
         tabId,
       } = message as Record<string, unknown>;
-      if (
+      if (type === "embeddedSession" && typeof tabId === "string") {
+        assetTarget = { ...target, tabId };
+      } else if (
         type === "fileChooser" &&
         typeof id === "string" &&
         typeof multiple === "boolean" &&
@@ -282,7 +302,7 @@ export function createPreviewStreamClient(
         events.onFileChooser?.({
           multiple,
           accept,
-          uploadUrl: previewStreamUploadUrl(target, id),
+          uploadUrl: previewStreamUploadUrl(assetTarget, id),
           credentials: target.access.credentials,
         });
       } else if (type === "fileChooserClosed" && typeof id === "string") {
@@ -299,6 +319,8 @@ export function createPreviewStreamClient(
         events.onPointer?.({ phase, x, y, sequence });
       } else if (type === "popup" && typeof tabId === "string") {
         events.onPopup?.(tabId);
+      } else if (type === "embeddedMessage" && "message" in message) {
+        events.onEmbeddedMessage?.(message.message);
       } else if (type === "clipboard" && typeof text === "string") {
         events.onClipboard?.(text);
       } else if (
@@ -310,7 +332,7 @@ export function createPreviewStreamClient(
         events.onDownload?.({
           fileName,
           sizeBytes,
-          url: previewStreamDownloadUrl(target, id),
+          url: previewStreamDownloadUrl(assetTarget, id),
         });
       } else if (type === "viewport" && typeof width === "number" && typeof height === "number") {
         failures = 0;
@@ -374,8 +396,10 @@ export function createPreviewStreamClient(
   return {
     send: (input) => {
       if (socket?.readyState !== WebSocket.OPEN) return false;
-      if (!control?.canOperate) return false;
-      if (input.type !== "takeControl" && control.controller !== "you") return false;
+      if (!(target.embeddedAsset !== undefined && input.type === "embeddedMessage")) {
+        if (!control?.canOperate) return false;
+        if (input.type !== "takeControl" && control.controller !== "you") return false;
+      }
       socket.send(JSON.stringify(input));
       return true;
     },

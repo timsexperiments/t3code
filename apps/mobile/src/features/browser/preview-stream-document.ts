@@ -7,6 +7,8 @@ import type {
 } from "@t3tools/client-runtime/preview/server-browser-stream";
 
 export interface PreviewStreamConfiguration {
+  readonly embeddedAsset?: string;
+  readonly embeddedType?: "html" | "mcp";
   readonly access: DeviceHubAccess;
   readonly threadId: string;
   readonly tabId: string;
@@ -15,6 +17,7 @@ export interface PreviewStreamConfiguration {
 }
 
 export type PreviewStreamMessage =
+  | { readonly type: "embeddedMessage"; readonly message: unknown }
   | ({ readonly type: "control" } & PreviewStreamControl)
   | {
       readonly type: "status";

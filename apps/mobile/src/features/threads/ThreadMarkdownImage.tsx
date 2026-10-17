@@ -1,8 +1,9 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import { MISSING_FILE_ACCESS_MESSAGE } from "@t3tools/client-runtime/state/assets";
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { Image } from "expo-image";
 import { createContext, useContext, useEffect, useEffectEvent, useId, useState } from "react";
-import { fetch } from "expo/fetch";
+import { environmentFetch as fetch } from "../../lib/environment-network";
 import { parse, SvgAst, type JsxAST } from "react-native-svg";
 import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 
@@ -170,7 +171,7 @@ function ThreadMarkdownImageRequest(props: {
         />
       ) : (
         <Image
-          source={{ uri: props.uri }}
+          source={environmentMediaSource(props.uri)}
           contentFit="contain"
           cachePolicy="memory-disk"
           accessible={false}

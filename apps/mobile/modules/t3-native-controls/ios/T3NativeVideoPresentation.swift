@@ -27,12 +27,13 @@ final class T3NativeVideoPresentation: NSObject, AVPlayerViewControllerDelegate,
   private weak var fullScreenController: UIViewController?
   private var embedded = false
 
-  init(identifier: String, url: URL, title: String, completion: @escaping (Error?) -> Void) {
+  init(identifier: String, url: URL, title: String, headers: [String: String], completion: @escaping (Error?) -> Void) {
     self.identifier = identifier
     self.completion = completion
     super.init()
 
-    let item = AVPlayerItem(url: url)
+    let asset = AVURLAsset(url: url, options: headers.isEmpty ? nil : ["AVURLAssetHTTPHeaderFieldsKey": headers])
+    let item = AVPlayerItem(asset: asset)
     let metadata = AVMutableMetadataItem()
     metadata.identifier = .commonIdentifierTitle
     metadata.value = title as NSString

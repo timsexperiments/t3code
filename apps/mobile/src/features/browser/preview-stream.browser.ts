@@ -1,3 +1,4 @@
+import { createWebViewEnvironmentNetwork } from "../../lib/webview-network.browser";
 import {
   createPreviewFramePainter,
   createPreviewStreamClient,
@@ -72,6 +73,7 @@ export function start(configuration: PreviewStreamConfiguration) {
     window.ReactNativeWebView.postMessage(JSON.stringify(message));
   };
   const { interactive } = configuration;
+  const network = createWebViewEnvironmentNetwork();
   document.body.style.background = configuration.background;
   const container = document.createElement("div");
   const canvas = document.createElement("canvas");
@@ -170,8 +172,11 @@ export function start(configuration: PreviewStreamConfiguration) {
         maxWidth: cap.width,
         maxHeight: cap.height,
         interactive,
+        embeddedAsset: configuration.embeddedAsset,
+        embeddedType: configuration.embeddedType,
       },
       {
+        onEmbeddedMessage: (message) => post({ type: "embeddedMessage", message }),
         onFrame: (jpeg) => painter.paint(jpeg),
         onPointer: showAgentCursor,
         onClipboard: (text) => post({ type: "clipboard", text }),
@@ -228,6 +233,7 @@ export function start(configuration: PreviewStreamConfiguration) {
         onGone: () => post({ type: "gone" }),
         onHostSetup: (setup) => post({ type: "hostSetup", ...setup }),
       },
+      network,
     );
     client = next;
   };

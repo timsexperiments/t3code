@@ -1,3 +1,6 @@
+vi.mock("expo/fetch", () => ({
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +13,12 @@ const mocks = vi.hoisted(() => ({
   available: vi.fn(),
   open: vi.fn(),
   uuid: vi.fn(),
+}));
+
+vi.mock("expo-secure-store", () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
+  getItem: () => null,
+  setItemAsync: async () => undefined,
 }));
 
 vi.mock("expo-file-system", () => {
@@ -78,6 +87,11 @@ import {
   shareLocalAttachment,
 } from "./attachmentDownload";
 import { isForegroundHandoffActive } from "./foreground-handoff";
+import {
+  clearServiceAuthDocumentForTests,
+  makeCustomHeadersServiceAuth,
+  setServiceAuthForUrl,
+} from "../persistence/environment-service-auth";
 
 const NOW = 1_787_990_400_000;
 const DAY_MS = 24 * 60 * 60_000;
@@ -88,6 +102,7 @@ const input = {
 };
 
 beforeEach(() => {
+  clearServiceAuthDocumentForTests();
   mocks.open.mockReset();
   mocks.open.mockResolvedValue(undefined);
   mocks.directories.clear();
@@ -116,6 +131,19 @@ afterEach(() => {
 });
 
 describe("downloadAndShareAttachment", () => {
+  it("passes saved headers and cancellation to native downloads", async () => {
+    await setServiceAuthForUrl(
+      input.url,
+      makeCustomHeadersServiceAuth([{ name: "X-Service-Token", value: "test-token" }]),
+    );
+    const signal = new AbortController().signal;
+    await downloadAndShareAttachment({ ...input, signal });
+    expect(mocks.download.mock.calls[0]?.[2]).toEqual({
+      signal,
+      headers: { "X-Service-Token": "test-token" },
+    });
+  });
+
   it("downloads the chosen environment's signed URL and shares the local file", async () => {
     const controller = new AbortController();
     await downloadAndShareAttachment({ ...input, signal: controller.signal });

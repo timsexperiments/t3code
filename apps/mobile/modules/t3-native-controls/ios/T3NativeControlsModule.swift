@@ -37,23 +37,24 @@ public final class T3NativeControlsModule: Module {
       Events("onMetricsChange")
     }
 
-    AsyncFunction("presentVideo") { (url: URL, title: String, sourceIdentifier: String, identifier: String, promise: Promise) in
+    AsyncFunction("presentVideo") { (url: URL, title: String, sourceIdentifier: String, identifier: String, headers: [String: String], promise: Promise) in
       try self.presentVideo(
         url: url,
         title: title,
         sourceIdentifier: sourceIdentifier,
         identifier: identifier,
+        headers: headers,
         promise: promise
       )
     }.runOnQueue(.main)
 
-    AsyncFunction("presentFile") { (url: URL, title: String, sourceIdentifier: String, identifier: String, promise: Promise) in
+    AsyncFunction("presentFile") { (url: URL, title: String, sourceIdentifier: String, identifier: String, headers: [String: String], promise: Promise) in
       try self.presentFile(url: url, title: title, sourceIdentifier: sourceIdentifier,
-                           identifier: identifier, promise: promise)
+                           identifier: identifier, headers: headers, promise: promise)
     }.runOnQueue(.main)
 
-    AsyncFunction("presentFiles") { (urls: [URL], titles: [String], selectedIndex: Int, identifier: String, promise: Promise) in
-      guard !urls.isEmpty, urls.count == titles.count, urls.indices.contains(selectedIndex) else {
+    AsyncFunction("presentFiles") { (urls: [URL], titles: [String], selectedIndex: Int, identifier: String, headers: [[String: String]], promise: Promise) in
+      guard !urls.isEmpty, urls.count == titles.count, urls.count == headers.count, urls.indices.contains(selectedIndex) else {
         throw URLError(.badURL)
       }
       let file = try self.makeFilePresentation(sourceIdentifier: "", identifier: identifier, promise: promise)
@@ -61,7 +62,7 @@ public final class T3NativeControlsModule: Module {
         file.dismiss()
         return
       }
-      file.present(urls: urls, titles: titles, selectedIndex: selectedIndex, from: presenter)
+      file.present(urls: urls, titles: titles, selectedIndex: selectedIndex, headers: headers, from: presenter)
     }.runOnQueue(.main)
 
     OnDestroy {
@@ -215,7 +216,7 @@ public final class T3NativeControlsModule: Module {
     try? scene.write(toFile: readyPath, atomically: true, encoding: .utf8)
   }
 
-  private func presentVideo(url: URL, title: String, sourceIdentifier: String, identifier: String, promise: Promise) throws {
+  private func presentVideo(url: URL, title: String, sourceIdentifier: String, identifier: String, headers: [String: String], promise: Promise) throws {
     let isPlayableURL = url.isFileURL
       ? FileManager.default.isReadableFile(atPath: url.path)
       : (["https", "http"].contains(url.scheme?.lowercased() ?? "") && url.host != nil)
@@ -229,7 +230,7 @@ public final class T3NativeControlsModule: Module {
         userInfo: [NSLocalizedDescriptionKey: "The video preview is no longer available."]
       )
     }
-    let presentation = T3NativeVideoPresentation(identifier: identifier, url: url, title: title) { [weak self] error in
+    let presentation = T3NativeVideoPresentation(identifier: identifier, url: url, title: title, headers: headers) { [weak self] error in
       self?.videoPresentation = nil
       if let error { promise.reject(error) } else { promise.resolve(nil) }
     }
@@ -256,10 +257,10 @@ public final class T3NativeControlsModule: Module {
   }
 
   private func presentFile(url: URL, title: String, sourceIdentifier: String,
-                           identifier: String, promise: Promise) throws {
+                           identifier: String, headers: [String: String], promise: Promise) throws {
     let file = try makeFilePresentation(sourceIdentifier: sourceIdentifier, identifier: identifier, promise: promise)
     guard let presenter = appContext?.utilities?.currentViewController() else { file.dismiss(); return }
-    file.present(url: url, title: title, from: presenter)
+    file.present(url: url, title: title, headers: headers, from: presenter)
   }
 
   private func dismissFilePresentation(identifier: String) {

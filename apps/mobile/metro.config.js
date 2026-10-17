@@ -18,6 +18,7 @@ const licenseGeneratorSource = path.join(
 const escapedWorkspaceRoot = workspaceRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const mobileShikiRoot = path.dirname(require.resolve("shiki/package.json", { paths: [__dirname] }));
 const generatedDeviceStreamRoot = path.join(__dirname, ".generated", "device-stream");
+const generatedHtmlNetworkRoot = path.join(__dirname, ".generated", "html-network");
 const generatedPreviewStreamRoot = path.join(__dirname, ".generated", "preview-stream");
 const resolveShikiDependencyRoot = (packageName) => {
   const entryPath = require.resolve(packageName, { paths: [mobileShikiRoot] });
@@ -50,6 +51,7 @@ config.resolver = {
     "@t3tools/mobile-third-party-licenses": generatedLicenseModuleRoot,
     "@t3tools/mobile-device-stream": generatedDeviceStreamRoot,
     "@t3tools/mobile-preview-stream": generatedPreviewStreamRoot,
+    "@t3tools/mobile-html-network": generatedHtmlNetworkRoot,
     shiki: mobileShikiRoot,
     "@shikijs/core": resolveShikiDependencyRoot("@shikijs/core"),
     "@shikijs/engine-javascript": resolveShikiDependencyRoot("@shikijs/engine-javascript"),
@@ -98,15 +100,19 @@ async function generateMobileThirdPartyLicenses() {
 }
 
 async function prepareStreamScripts() {
-  const { generateDeviceStreamScript, generatePreviewStreamScript } = await import(
-    pathToFileURL(path.join(__dirname, "scripts", "generate-device-stream.mts")).href
-  );
+  const { generateDeviceStreamScript, generatePreviewStreamScript, generateHtmlNetworkScript } =
+    await import(pathToFileURL(path.join(__dirname, "scripts", "generate-device-stream.mts")).href);
   const generateAll = () =>
-    Promise.all([generateDeviceStreamScript(), generatePreviewStreamScript()]);
+    Promise.all([
+      generateDeviceStreamScript(),
+      generatePreviewStreamScript(),
+      generateHtmlNetworkScript(),
+    ]);
   await generateAll();
   if (process.env.NODE_ENV !== "production") {
     let rebuild = Promise.resolve();
     for (const [directory, files, generate] of [
+      ["apps/mobile/src/features/threads", ["html-network.browser.ts"], generateHtmlNetworkScript],
       [
         "apps/mobile/src/features/devices",
         ["device-stream.browser.ts"],
@@ -117,7 +123,19 @@ async function prepareStreamScripts() {
         ["preview-stream.browser.ts"],
         generatePreviewStreamScript,
       ],
-      ["packages/client-runtime/src/device", ["stream.ts", "hubAccess.ts"], generateAll],
+      [
+        "apps/mobile/src/lib",
+        ["webview-network.browser.ts", "webview-network-protocol.ts"],
+        generateAll,
+      ],
+      ["packages/client-runtime/src", ["environmentNetwork.ts"], generateAll],
+      // The preview transport also imports `hubAccess.ts`.
+      [
+        "packages/client-runtime/src/device",
+        ["stream.ts", "hubAccess.ts", "mjpeg.ts"],
+        generateAll,
+      ],
+
       [
         "packages/client-runtime/src/preview",
         ["serverBrowserStream.ts"],

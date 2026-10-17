@@ -1,3 +1,5 @@
+sdk_version = Gem::Version.new(Pod::Executable.execute_command('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version']).strip)
+
 Pod::Spec.new do |s|
   s.name           = 'T3NativeControls'
   s.version        = '1.0.0'
@@ -14,6 +16,7 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
+    'SWIFT_ACTIVE_COMPILATION_CONDITIONS' => "$(inherited) #{sdk_version >= Gem::Version.new('27.1') ? 'T3_IOS_27_1_SDK' : ''}",
   }
   s.source_files = '**/*.{h,m,mm,swift,hpp,cpp}'
 end

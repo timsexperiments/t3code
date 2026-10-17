@@ -1,3 +1,6 @@
+import type { EnvironmentId } from "@t3tools/contracts";
+import { HtmlFileWebView } from "../threads/HtmlRenderWebView";
+import { environmentMediaSource } from "../../lib/environment-network";
 import { useState } from "react";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
@@ -7,12 +10,26 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { FilePreviewLoading } from "./FilePreviewFeedback";
 import { LoadingStrip } from "../../components/ui/LoadingStrip";
 
-export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) {
+export function WorkspaceFileWebPreview(props: {
+  readonly environmentId: EnvironmentId;
+  readonly uri: string | null;
+}) {
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (props.uri === null) {
     return <FilePreviewLoading message="Preparing preview..." background="card" />;
+  }
+
+  if (/\.html?(?:$|[?#])/i.test(props.uri)) {
+    return (
+      <HtmlFileWebView
+        environmentId={props.environmentId}
+        uri={props.uri}
+        title="File preview"
+        nested={false}
+      />
+    );
   }
 
   return (
@@ -25,7 +42,7 @@ export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) 
         </View>
       ) : null}
       <WebView
-        source={{ uri: props.uri }}
+        source={environmentMediaSource(props.uri)}
         originWhitelist={["*"]}
         allowsBackForwardNavigationGestures
         allowsFullscreenVideo
