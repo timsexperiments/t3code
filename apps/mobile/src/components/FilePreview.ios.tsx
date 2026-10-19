@@ -18,6 +18,7 @@ const NativeControls = requireNativeModule<{
     uris: readonly string[],
     names: readonly string[],
     selectedIndex: number,
+    sourceIdentifiers: readonly string[],
     identifier: string,
     headers: readonly Readonly<Record<string, string>>[],
   ): Promise<void>;
@@ -48,6 +49,7 @@ function NativeFilePreview(props: {
               0,
               gallery.findIndex((item) => item.uri === uri),
             ),
+            gallery.map((item) => item.sourceIdentifier ?? ""),
             identifier,
             gallery.map((item) => environmentRequestOptions(item.uri).headers ?? {}),
           )
