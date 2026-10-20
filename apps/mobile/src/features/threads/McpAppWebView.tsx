@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import * as Dialog from "../../components/ui/Dialog";
 import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
@@ -24,8 +25,7 @@ import * as Predicate from "effect/Predicate";
 import Constants from "expo-constants";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, View } from "react-native";
-
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
@@ -236,6 +236,7 @@ export function ThreadMcpApp(props: {
   }, [props.environmentId, props.threadId, props.itemId, app.tool]);
   const webView = useRef<WebView<object>>(null);
   const hostRef = useRef<McpAppHost | null>(null);
+  const userActive = useRef(false);
 
   useEffect(() => {
     if (uri === null) return;
@@ -348,9 +349,12 @@ export function ThreadMcpApp(props: {
       },
       requestDisplayMode: async (mode) => {
         const current = latest.current.props;
+        // receive dispatches synchronously; read activation before awaiting teardown.
         if (
           mode === "fullscreen" &&
-          (latest.current.awaitingUser || !latest.current.navigation.isFocused())
+          (!userActive.current ||
+            latest.current.awaitingUser ||
+            !latest.current.navigation.isFocused())
         ) {
           return current.displayMode ?? "inline";
         }
@@ -509,15 +513,16 @@ export function ThreadMcpApp(props: {
         className="items-center justify-center gap-2 rounded-lg border border-border"
       >
         <Text className="text-sm text-foreground-muted">The {app.server} app was closed</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setDocumentKey((value) => value + 1);
-            setClosed(false);
-          }}
-        >
-          <Text className="text-sm text-foreground">Show app</Text>
-        </Pressable>
+        <View className="items-center">
+          <Button
+            label="Show app"
+            tone="secondary"
+            onPress={() => {
+              setDocumentKey((value) => value + 1);
+              setClosed(false);
+            }}
+          />
+        </View>
       </View>
     );
   }
@@ -570,7 +575,9 @@ export function ThreadMcpApp(props: {
               setNavigatedAway(true);
               return;
             }
+            userActive.current = envelope.active === true;
             hostRef.current?.receive(message);
+            userActive.current = false;
           }}
         />
       ) : asset._tag === "Failure" || crashed ? (

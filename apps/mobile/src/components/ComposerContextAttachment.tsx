@@ -1,4 +1,5 @@
 import { environmentMediaSource } from "../lib/environment-network";
+import { Button } from "./ui/Button";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
 import * as Dialog from "./ui/Dialog";
@@ -120,16 +121,14 @@ export function ComposerContextAttachment(props: {
         </Text>
       ) : null}
       <PresentationSource identifier={shareSourceIdentifier}>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={sharing ? "Opening attachment…" : "Open or share attachment"}
+          tone="secondary"
           disabled={sharing}
           onPress={() => void share()}
-          className="rounded-xl bg-subtle p-4"
-        >
-          <Text className="text-foreground">
-            {sharing ? "Opening attachment…" : "Open or share attachment"}
-          </Text>
-        </Pressable>
+          fullWidth
+          loading={sharing}
+        />
       </PresentationSource>
       {previewOpen && record.kind === "image" && uri ? (
         <FilePreviewModal

@@ -1,8 +1,9 @@
 import { environmentMediaSource } from "../lib/environment-network";
+import { Button } from "./ui/Button";
 import * as Dialog from "./ui/Dialog";
 
 import { useEffect, useEffectEvent } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { Modal, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -86,13 +87,9 @@ function DocumentPreview(props: {
           <Text className="text-foreground-muted" numberOfLines={2}>
             {name ?? "Document"}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={props.onRequestClose}
-            className="self-end p-3"
-          >
-            <Text className="text-foreground">Cancel</Text>
-          </Pressable>
+          <View className="items-end">
+            <Button label="Cancel" tone="text" onPress={props.onRequestClose} />
+          </View>
         </View>
       </View>
     </Modal>
