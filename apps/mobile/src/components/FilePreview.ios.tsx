@@ -1,4 +1,6 @@
+import { environmentRequestOptions } from "../lib/environment-network";
 import * as Dialog from "./ui/Dialog";
+
 import { requireNativeModule } from "expo";
 import { useEffect, useEffectEvent, useId } from "react";
 
@@ -10,6 +12,7 @@ const NativeControls = requireNativeModule<{
     name: string,
     sourceIdentifier: string,
     identifier: string,
+    headers: Readonly<Record<string, string>>,
   ): Promise<void>;
   presentFiles(
     uris: readonly string[],
@@ -17,6 +20,7 @@ const NativeControls = requireNativeModule<{
     selectedIndex: number,
     sourceIdentifiers: readonly string[],
     identifier: string,
+    headers: readonly Readonly<Record<string, string>>[],
   ): Promise<void>;
   dismissFile(identifier: string): Promise<void>;
 }>("T3NativeControls");
@@ -47,8 +51,15 @@ function NativeFilePreview(props: {
             ),
             gallery.map((item) => item.sourceIdentifier ?? ""),
             identifier,
+            gallery.map((item) => environmentRequestOptions(item.uri).headers ?? {}),
           )
-        : NativeControls.presentFile(uri, name ?? "Preview", sourceIdentifier ?? "", identifier);
+        : NativeControls.presentFile(
+            uri,
+            name ?? "Preview",
+            sourceIdentifier ?? "",
+            identifier,
+            environmentRequestOptions(uri).headers ?? {},
+          );
     void presentation
       .catch((error: unknown) => {
         if (!canceled) onOpenError(error);

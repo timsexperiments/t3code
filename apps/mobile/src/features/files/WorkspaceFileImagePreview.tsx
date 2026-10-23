@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import { useId, useMemo, useState } from "react";
 import { Image, Pressable, View } from "react-native";
 
@@ -19,7 +20,7 @@ function ResolvedWorkspaceFileImagePreview(props: {
   const sourceIdentifier = useId();
   const mediaActions = useMediaActions(props.actionsSource);
   const imageSource = useMemo(
-    () => ({ uri: props.uri, cache: "force-cache" as const }),
+    () => ({ ...environmentMediaSource(props.uri), cache: "force-cache" as const }),
     [props.uri],
   );
 

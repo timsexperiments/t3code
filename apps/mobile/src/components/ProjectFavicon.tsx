@@ -1,5 +1,7 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { SymbolView } from "./ui/AppSymbol";
 import { AppText } from "./ui/AppText";
+
 import { Image } from "expo-image";
 import { memo, useLayoutEffect, useMemo, useState } from "react";
 import { View } from "react-native";
@@ -192,7 +194,10 @@ function ProjectFaviconImage(props: {
           source={
             faviconRequest.faviconUrl.startsWith("data:")
               ? { uri: faviconRequest.faviconUrl }
-              : { uri: faviconRequest.faviconUrl, cacheKey: faviconRequest.cacheKey }
+              : {
+                  ...environmentMediaSource(faviconRequest.faviconUrl),
+                  cacheKey: faviconRequest.cacheKey,
+                }
           }
           cachePolicy={faviconRequest.faviconUrl.startsWith("data:") ? "memory" : "memory-disk"}
           recyclingKey={faviconRequest.cacheKey}

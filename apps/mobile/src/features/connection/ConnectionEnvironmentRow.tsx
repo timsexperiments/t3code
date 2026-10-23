@@ -7,8 +7,9 @@ import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/cont
 import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
+
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 
 import { AppText as Text } from "../../components/ui/AppText";
@@ -23,6 +24,13 @@ import { environmentPresentations } from "../../state/presentation";
 import { ConnectionDiagnosisDetails, useConnectionDiagnosis } from "./ConnectionDiagnosisDetails";
 import { ConnectionFormField } from "./ConnectionFormField";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
+import {
+  EnvironmentServiceAuthFields,
+  serviceAuthDraftFromStored,
+  serviceAuthFromDraft,
+  type EnvironmentServiceAuthDraft,
+} from "./EnvironmentServiceAuthFields";
+import { moveServiceAuth, serviceAuthForUrl } from "../../persistence/environment-service-auth";
 import { environmentStatusText } from "./environmentStatusText";
 
 function connectionStatusLabel(environment: ConnectedEnvironmentSummary): string | null {
@@ -51,6 +59,9 @@ export function ConnectionEnvironmentRow(props: {
 }) {
   const [label, setLabel] = useState(props.environment.environmentLabel);
   const [url, setUrl] = useState(props.environment.displayUrl);
+  const [serviceAuth, setServiceAuth] = useState<EnvironmentServiceAuthDraft>(() =>
+    serviceAuthDraftFromStored(serviceAuthForUrl(props.environment.displayUrl)),
+  );
   const serverConfig = useAtomValue(
     serverEnvironment.configValueAtom(props.environment.environmentId),
   );
@@ -74,7 +85,27 @@ export function ConnectionEnvironmentRow(props: {
     enabled &&
     (props.environment.connectionState === "connecting" ||
       props.environment.connectionState === "reconnecting");
+
+  useEffect(() => {
+    if (!props.expanded) {
+      return;
+    }
+    setServiceAuth(serviceAuthDraftFromStored(serviceAuthForUrl(props.environment.displayUrl)));
+  }, [props.environment.displayUrl, props.expanded]);
+
   const handleSave = useCallback(async () => {
+    const previousAuth = serviceAuthForUrl(props.environment.displayUrl);
+    try {
+      const nextAuth = serviceAuthFromDraft(serviceAuth);
+      await moveServiceAuth(props.environment.displayUrl, url.trim(), nextAuth);
+    } catch (error) {
+      Dialog.alert(
+        "Could not save service authentication",
+        error instanceof Error ? error.message : "The service credential could not be saved.",
+      );
+      return;
+    }
+
     const result = await props.onUpdate(props.environment.environmentId, {
       label: label.trim(),
       displayUrl: url.trim(),
@@ -83,12 +114,15 @@ export function ConnectionEnvironmentRow(props: {
       props.onToggle();
       return;
     }
+    await moveServiceAuth(url.trim(), props.environment.displayUrl, previousAuth).catch(
+      () => undefined,
+    );
     const error = Cause.squash(result.cause);
     Dialog.alert(
       "Could not update environment",
       error instanceof Error ? error.message : "The environment could not be updated.",
     );
-  }, [label, url, props]);
+  }, [label, props, serviceAuth, url]);
 
   return (
     <Animated.View layout={LinearTransition.duration(250)} className="bg-grouped-card">
@@ -232,6 +266,8 @@ export function ConnectionEnvironmentRow(props: {
                 value={url}
                 onChangeText={setUrl}
               />
+
+              <EnvironmentServiceAuthFields value={serviceAuth} onChange={setServiceAuth} />
             </>
           )}
 

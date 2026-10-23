@@ -1,3 +1,4 @@
+import { createWebViewEnvironmentNetwork } from "../../lib/webview-network.browser";
 import {
   createDeviceStreamClient,
   type DeviceScreenSize,
@@ -151,6 +152,7 @@ export function start(configuration: DeviceStreamConfiguration) {
         post({ type: "input", connected });
       },
     },
+    createWebViewEnvironmentNetwork(),
   );
   activeClient = client;
   client.setMjpegImage(image);

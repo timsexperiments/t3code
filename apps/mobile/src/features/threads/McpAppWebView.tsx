@@ -17,13 +17,14 @@ import { CommandId, MessageId } from "@t3tools/contracts";
 import {
   mcpAppAllowAttribute,
   mcpAppFileName,
+  injectMcpAppCsp,
   mcpAppReferencesEqual,
   type McpAppReference,
 } from "@t3tools/shared/mcpApp";
 import * as Predicate from "effect/Predicate";
 import Constants from "expo-constants";
 import { useNavigation } from "@react-navigation/native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
@@ -32,8 +33,10 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { shareGeneratedAttachment } from "../../lib/attachmentDownload";
 import { mobileHtmlRenderTheme } from "../../lib/htmlRenderTheme";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
+import { mcpAppOuterDocument } from "../../lib/mcpAppDocument";
+import { environmentFetch } from "../../lib/environment-network";
 import { uuidv4 } from "../../lib/uuid";
-import { useAssetUrlState } from "../../state/assets";
+import { useAssetUrlState, useRefreshAssetUrl } from "../../state/assets";
 import { useThreadShell } from "../../state/entities";
 import { mcpAppEnvironment } from "../../state/mcpApps";
 import { orchestrationEnvironment } from "../../state/orchestration";
@@ -44,24 +47,6 @@ import { useAppearancePreferences } from "../settings/appearance/AppearancePrefe
 import { MCP_APP_INLINE_MAX_HEIGHT, mcpAppInlineHeight } from "./mcpAppSizing";
 
 const ROW_BOTTOM_MARGIN = 8;
-
-// Android exposes `ReactNativeWebView` to every frame, so a frame nested in the
-// app could post to React Native directly. The outer page therefore wraps what
-// it relays with a secret only it holds, and React Native drops anything else.
-// The relay also attests activation; the sandboxed app cannot set that flag.
-function outerDocument(src: string, allow: string, secret: string) {
-  const attribute = (value: string) =>
-    value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>html,body{margin:0;height:100%;background:transparent}iframe{border:0;display:block;width:100%;height:100%}</style></head>
-<body><iframe id="app" sandbox="allow-scripts allow-forms" allow="${attribute(allow)}"></iframe>
-<script>(function(){var frame=document.getElementById("app"),secret=${JSON.stringify(secret)},loads=0,live=true;
-var send=function(m){var u=navigator.userActivation;window.ReactNativeWebView.postMessage(JSON.stringify({secret:secret,active:!!(u&&u.isActive)&&document.activeElement===frame,message:m}));};
-frame.addEventListener("load",function(){loads+=1;if(loads>1&&live){live=false;send({t3:"navigated"});}});
-window.addEventListener("message",function(e){if(live&&e.source===frame.contentWindow)send(e.data);});
-window.__t3McpAppReceive=function(m){live&&frame.contentWindow&&frame.contentWindow.postMessage(m,"*");};
-frame.src=${JSON.stringify(src).replace(/</g, "\\u003c")};})();</script></body></html>`;
-}
 
 const commandFailure = (result: {
   readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
@@ -146,6 +131,7 @@ export function ThreadMcpApp(props: {
     [app],
   );
   const asset = useAssetUrlState(props.environmentId, resource);
+  const refreshAsset = useRefreshAssetUrl(props.environmentId, resource);
   // The view keeps its first URL: a re-minted one would reload the app.
   const [uri, setUri] = useState<string | null>(null);
   if (uri === null && asset._tag === "Success") setUri(asset.url);
@@ -463,12 +449,48 @@ export function ThreadMcpApp(props: {
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Each new document needs the call.
   }, [toolCall, uri, generation, documentKey]);
 
+  const documentRetries = useRef(0);
+  const refreshDocument = useEffectEvent(() => refreshAsset());
+  const [document, setDocument] = useState<{ uri: string; html: string } | null>(null);
+  useEffect(() => {
+    if (uri === null) return;
+    const controller = new AbortController();
+    void environmentFetch(uri, { signal: controller.signal, redirect: "error" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`MCP app request failed: ${response.status}`);
+        const html = await response.text();
+        if (!controller.signal.aborted) {
+          documentRetries.current = 0;
+          setDocument({ uri, html });
+        }
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        if (++documentRetries.current > 1) {
+          setCrashed(true);
+          return;
+        }
+        void refreshDocument().then((next) => {
+          if (controller.signal.aborted) return;
+          if (next === null || next === uri) setCrashed(true);
+          else setUri(next);
+        });
+      });
+    return () => controller.abort();
+  }, [uri]);
   const source = useMemo(
     () =>
-      uri === null
+      document === null || document.uri !== uri
         ? null
-        : { html: outerDocument(uri, mcpAppAllowAttribute(app.permissions), secret) },
-    [uri, app.permissions, secret],
+        : {
+            baseUrl: document.uri,
+            html: mcpAppOuterDocument(
+              injectMcpAppCsp(document.html, app.csp),
+              mcpAppAllowAttribute(app.permissions),
+              secret,
+            ),
+          },
+    [document, uri, app.csp, app.permissions, secret],
   );
 
   if (presentedFullscreen) {
@@ -513,13 +535,13 @@ export function ThreadMcpApp(props: {
             The {app.server} app left its page and was stopped
           </Text>
         </View>
-      ) : uri !== null && !crashed ? (
+      ) : source !== null && !crashed ? (
         <WebView<object>
           key={`${documentKey}:${generation}`}
           ref={webView}
           onContentProcessDidTerminate={restart}
           onRenderProcessGone={restart}
-          source={source!}
+          source={source}
           accessibilityLabel={`${app.server} app`}
           style={{ flex: 1, backgroundColor: "transparent" }}
           nestedScrollEnabled
@@ -532,7 +554,8 @@ export function ThreadMcpApp(props: {
           onShouldStartLoadWithRequest={(request) =>
             Platform.OS === "android" ||
             request.isTopFrame === false ||
-            request.url === "about:blank"
+            request.url === "about:blank" ||
+            request.url === uri
           }
           setSupportMultipleWindows={false}
           onLoadEnd={() => setLoaded(true)}

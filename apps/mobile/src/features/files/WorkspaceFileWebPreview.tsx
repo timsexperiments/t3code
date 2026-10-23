@@ -1,3 +1,6 @@
+import type { EnvironmentId } from "@t3tools/contracts";
+import { HtmlFileWebView } from "../threads/HtmlRenderWebView";
+import { environmentMediaSource } from "../../lib/environment-network";
 import { useEffect, useState } from "react";
 import { BackHandler, Platform, View } from "react-native";
 import { WebView } from "react-native-webview";
@@ -12,14 +15,20 @@ import { ControlPill } from "../../components/ui/ControlPill";
 import { isPdfPreviewUri } from "../../lib/pdfPreview";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 
-export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) {
+export function WorkspaceFileWebPreview(props: {
+  readonly environmentId: EnvironmentId;
+  readonly uri: string | null;
+}) {
   if (props.uri === null) {
     return <FilePreviewLoading message="Preparing preview..." background="card" />;
   }
-  return <DocumentWebPreview key={props.uri} uri={props.uri} />;
+  return <DocumentWebPreview key={props.uri} uri={props.uri} environmentId={props.environmentId} />;
 }
 
-function DocumentWebPreview(props: { readonly uri: string }) {
+function DocumentWebPreview(props: {
+  readonly uri: string;
+  readonly environmentId: EnvironmentId;
+}) {
   const insets = useSafeAreaInsets();
   const columnMetrics = useNativeColumnLayoutMetrics();
   const pdfTopInset = Platform.OS === "ios" ? (columnMetrics?.safeArea.top ?? insets.top) : 0;
@@ -41,6 +50,17 @@ function DocumentWebPreview(props: { readonly uri: string }) {
       <View className="flex-1" style={{ paddingTop: pdfTopInset }}>
         <PdfPreview uri={props.uri} />
       </View>
+    );
+  }
+
+  if (/\.html?(?:$|[?#])/i.test(props.uri)) {
+    return (
+      <HtmlFileWebView
+        environmentId={props.environmentId}
+        uri={props.uri}
+        title="File preview"
+        nested={false}
+      />
     );
   }
 
@@ -67,7 +87,7 @@ function DocumentWebPreview(props: { readonly uri: string }) {
           </View>
         ) : null}
         <WebView
-          source={{ uri: props.uri }}
+          source={environmentMediaSource(props.uri)}
           originWhitelist={["*"]}
           allowsBackForwardNavigationGestures
           allowsFullscreenVideo

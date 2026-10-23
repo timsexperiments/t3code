@@ -1,11 +1,32 @@
 import { EnvironmentId } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { assetImageSource } from "./assetImageSource";
+
+const { mediaSource } = vi.hoisted(() => ({
+  mediaSource: vi.fn<(uri: string) => { uri: string; headers?: Record<string, string> }>((uri) => ({
+    uri,
+  })),
+}));
+
+vi.mock("./environment-network", () => ({ environmentMediaSource: mediaSource }));
 
 const environmentId = EnvironmentId.make("environment-1");
 
 describe("assetImageSource", () => {
+  it("retains transport headers while using a stable attachment cache key", () => {
+    const uri = "https://host/api/assets/token/p.jpg";
+    const headers = { "X-Service-Token": "test-token" };
+    mediaSource.mockReturnValueOnce({ uri, headers });
+    const source = assetImageSource(
+      environmentId,
+      { _tag: "attachment", attachmentId: "photo.jpg" },
+      uri,
+    );
+    expect(source.headers).toEqual(headers);
+    expect(source.cacheKey).toBeDefined();
+  });
+
   it("caches an attachment under one key across re-signed URLs", () => {
     const resource = { _tag: "attachment", attachmentId: "thread-1-photo.jpg" } as const;
     const first = assetImageSource(
