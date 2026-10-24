@@ -1,6 +1,9 @@
+import { useWebViewEnvironmentNetwork } from "../../lib/use-webview-environment-network";
+import { environmentFetch as fetch } from "../../lib/environment-network";
 import { Button } from "../../components/ui/Button";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import * as Dialog from "../../components/ui/Dialog";
+
 import previewStreamScript from "@t3tools/mobile-preview-stream";
 import {
   previewStreamControlLabel,
@@ -50,6 +53,7 @@ export interface PreviewPictureInPictureState {
 }
 
 type NativeStreamBridge = {
+  readonly onEmbeddedMessage?: (message: unknown) => void;
   readonly ref?: Ref<PreviewStreamRef>;
   readonly onUnauthorized: () => void;
   readonly onGone?: () => void;
@@ -179,12 +183,15 @@ function AuthorizedPreviewStream({
     tabId: props.tabId,
     interactive: props.interactive,
     background: props.background,
+    embeddedAsset: props.embeddedAsset,
+    embeddedType: props.embeddedType,
   } satisfies PreviewStreamConfiguration);
   return (
     <PreviewStreamDocumentView
       key={`${attempt}:${configuration}`}
       {...props}
       ref={ref}
+      origin={props.access.httpBase}
       configuration={configuration}
       onUnauthorized={() => {
         const refusals = ++unauthorized.current;
@@ -221,11 +228,14 @@ function AuthorizedPreviewStream({
 function PreviewStreamDocumentView({
   ref,
   configuration,
+  origin,
   background,
   compact,
+  embeddedAsset,
   pdfUri,
   onUnauthorized,
   onGone,
+  onEmbeddedMessage,
   onViewport,
   onControl,
   onPictureInPicture,
@@ -234,7 +244,9 @@ function PreviewStreamDocumentView({
   onStreaming,
   onRecoverProcess,
 }: Omit<NativeStreamBridge, "onUnauthorized"> & {
+  readonly embeddedAsset?: string;
   readonly configuration: string;
+  readonly origin: string;
   readonly background: string;
   readonly onUnauthorized: () => boolean;
   readonly onRetry: () => void;
@@ -242,6 +254,7 @@ function PreviewStreamDocumentView({
   readonly onRecoverProcess: () => boolean;
 }) {
   const webView = useRef<WebView<object>>(null);
+  const network = useWebViewEnvironmentNetwork(webView, origin);
   const active = useRef(true);
   const failed = useRef(false);
   const [status, setStatus] = useState<"connecting" | "streaming" | "error">("connecting");
@@ -264,6 +277,7 @@ function PreviewStreamDocumentView({
       ),
     );
   };
+  const streamingChanged = useEffectEvent((streaming: boolean) => onStreamingChange?.(streaming));
   const controlChanged = useEffectEvent((next: PreviewStreamControl | null) => onControl?.(next));
   const command = (input: PreviewStreamInput) =>
     webView.current?.injectJavaScript(
@@ -281,6 +295,7 @@ function PreviewStreamDocumentView({
   const fail = (message: string) => {
     if (!active.current || failed.current) return;
     failed.current = true;
+    network.dispose();
     webView.current?.injectJavaScript("window.T3PreviewStream?.stop(); true;");
     onStreamingChange?.(false);
     setControl(null);
@@ -318,15 +333,16 @@ function PreviewStreamDocumentView({
       view?.injectJavaScript("window.T3PreviewStream?.stop(); true;");
     };
   }, []);
-  useEffect(() => () => onStreamingChange?.(false), [onStreamingChange]);
+  useEffect(() => () => streamingChanged(false), []);
   useEffect(() => () => controlChanged(null), []);
   const processTerminated = () => {
     if (!active.current || failed.current) return;
+    network.dispose();
     if (!onRecoverProcess()) fail("Browser viewer stopped. Reconnect to try again.");
   };
   return (
     <View className="flex-1" style={{ backgroundColor: background }}>
-      {!compact ? (
+      {!compact && embeddedAsset === undefined ? (
         <View className="flex-row items-center justify-between gap-2 border-b border-secondary-border px-3 py-2">
           <AppText className="text-xs text-foreground-muted">
             {previewStreamControlLabel(control)}
@@ -367,9 +383,13 @@ function PreviewStreamDocumentView({
           }
           onMessage={(event) => {
             if (!active.current || failed.current) return;
+            if (network.receive(event.nativeEvent.data)) return;
             const message = previewStreamMessage(event.nativeEvent.data);
             if (message === null) return;
             switch (message.type) {
+              case "embeddedMessage":
+                onEmbeddedMessage?.(message.message);
+                return;
               case "control": {
                 setControl(message);
                 const previousDialog = dialogRef.current;
@@ -420,7 +440,7 @@ function PreviewStreamDocumentView({
                   setControl(null);
                   onControl?.(null);
                 }
-                onStreamingChange?.(message.status === "streaming");
+                streamingChanged(message.status === "streaming");
                 if (message.status === "streaming") onStreaming();
             }
           }}

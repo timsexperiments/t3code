@@ -431,6 +431,10 @@
       "types": "./src/state/mcpApps.ts",
       "default": "./src/state/mcpApps.ts"
     },
+    "./environment-network": {
+      "types": "./src/environmentNetwork.ts",
+      "default": "./src/environmentNetwork.ts"
+    },
     "./source-control-clients": {
       "types": "./src/sourceControlClients.ts",
       "default": "./src/sourceControlClients.ts"

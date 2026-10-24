@@ -39,16 +39,16 @@ final class T3NativeFilePresentation: NSObject, QLPreviewControllerDataSource,
     super.init()
   }
 
-  func present(url: URL, title: String, from presenter: UIViewController) {
-    present(urls: [url], titles: [title], selectedIndex: 0, from: presenter)
+  func present(url: URL, title: String, headers: [String: String], from presenter: UIViewController) {
+    present(urls: [url], titles: [title], selectedIndex: 0, headers: [headers], from: presenter)
   }
 
-  func present(urls: [URL], titles: [String], selectedIndex: Int, from presenter: UIViewController) {
+  func present(urls: [URL], titles: [String], selectedIndex: Int, headers: [[String: String]], from presenter: UIViewController) {
     loading = Task { @MainActor [self] in
       do {
         for (index, url) in urls.enumerated() {
         let title = titles[index]
-        let file = try await Self.prepareFile(url: url, title: title)
+        let file = try await Self.prepareFile(url: url, title: title, headers: headers[index])
         guard !finished, !Task.isCancelled else {
           try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
           return
@@ -146,7 +146,7 @@ final class T3NativeFilePresentation: NSObject, QLPreviewControllerDataSource,
   }
 
   /// Copy original bytes so preview and sharing do not mutate a draft or workspace file.
-  nonisolated private static func prepareFile(url: URL, title: String) async throws -> URL {
+  nonisolated private static func prepareFile(url: URL, title: String, headers: [String: String]) async throws -> URL {
     try Task.checkCancellation()
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("t3-preview-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -160,7 +160,9 @@ final class T3NativeFilePresentation: NSObject, QLPreviewControllerDataSource,
         guard ["https", "http"].contains(url.scheme?.lowercased() ?? "") else {
           throw URLError(.unsupportedURL)
         }
-        let (temporaryFile, response) = try await URLSession.shared.download(from: url)
+        var request = URLRequest(url: url)
+        request.allHTTPHeaderFields = headers
+        let (temporaryFile, response) = try await URLSession.shared.download(for: request)
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
           throw URLError(.badServerResponse)
         }

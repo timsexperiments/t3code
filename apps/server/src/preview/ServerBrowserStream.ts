@@ -6,6 +6,7 @@ import {
   PreviewStreamHostSetup,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
@@ -24,6 +25,8 @@ import { authenticateMediaRequest } from "../auth/http.ts";
 import { assetResponseHeaders } from "../http.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import * as ServerBrowser from "./ServerBrowser.ts";
+import type { EmbeddedBrowserDocument } from "./EmbeddedBrowserPage.ts";
+import { embeddedBrowserAsset } from "./EmbeddedBrowserAsset.ts";
 
 const PREVIEW_STREAM_ROUTE_PREFIX = "/api/preview-stream";
 /** Matches `PREVIEW_STREAM_TAB_GONE_CODE` in the client. */
@@ -52,7 +55,10 @@ const parseMessage = (chunk: Uint8Array | string): unknown => {
 };
 
 // Request middleware owns tracing, including long-lived WebSocket sessions.
-const makeHandler = Effect.fnUntraced(function* (browser: ServerBrowser.ServerBrowser["Service"]) {
+const makeHandler = Effect.fnUntraced(function* (
+  browser: ServerBrowser.ServerBrowser["Service"],
+  loadEmbeddedAsset: (path: string) => Effect.Effect<EmbeddedBrowserDocument | null>,
+) {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const url = HttpServerRequest.toURL(request);
   if (Option.isNone(url)) return HttpServerResponse.text("Bad Request", { status: 400 });
@@ -81,27 +87,43 @@ const makeHandler = Effect.fnUntraced(function* (browser: ServerBrowser.ServerBr
   }
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const attached = yield* browser
-        .attachViewer({
-          threadId,
-          tabId,
-          canOperate,
-          maxWidth: intParam(params, "maxWidth", 1280, 7680),
-          maxHeight: intParam(params, "maxHeight", 800, 4320),
-          quality: intParam(params, "quality", DEFAULT_QUALITY, 100),
-        })
-        .pipe(
-          Effect.map((viewer) => ({ _tag: "attached" as const, viewer })),
-          Effect.catchTags({
-            ServerBrowserTabNotFoundError: () => Effect.succeed({ _tag: "gone" as const }),
-            ServerBrowserLaunchError: (error) => {
-              const setup = hostSetup(error.cause);
-              return setup === undefined
-                ? Effect.fail(error)
-                : Effect.succeed({ _tag: "hostSetup" as const, reason: encodeHostSetup(setup) });
-            },
-          }),
-        );
+      const asset = params.get("embeddedAsset");
+      const document = asset === null ? undefined : yield* loadEmbeddedAsset(asset);
+      const attached =
+        document === null
+          ? { _tag: "gone" as const }
+          : yield* browser
+              .attachViewer({
+                threadId,
+                tabId,
+                canOperate,
+                maxWidth: intParam(params, "maxWidth", 1280, 7680),
+                maxHeight: intParam(params, "maxHeight", 800, 4320),
+                quality: intParam(params, "quality", DEFAULT_QUALITY, 100),
+                ...(document === undefined
+                  ? {}
+                  : {
+                      embeddedDocument: {
+                        ...document,
+                        allowDownloads: params.get("embeddedType") === "html",
+                      },
+                    }),
+              })
+              .pipe(
+                Effect.map((viewer) => ({ _tag: "attached" as const, viewer })),
+                Effect.catchTags({
+                  ServerBrowserTabNotFoundError: () => Effect.succeed({ _tag: "gone" as const }),
+                  ServerBrowserLaunchError: (error) => {
+                    const setup = hostSetup(error.cause);
+                    return setup === undefined
+                      ? Effect.fail(error)
+                      : Effect.succeed({
+                          _tag: "hostSetup" as const,
+                          reason: encodeHostSetup(setup),
+                        });
+                  },
+                }),
+              );
       const incoming = NodeHttpServerRequest.toIncomingMessage(request);
       // JPEGs are already compressed. Disabling deflate also keeps all
       // pending writes in the socket buffer we bound below, not a zlib queue.
@@ -163,6 +185,8 @@ const makeHandler = Effect.fnUntraced(function* (browser: ServerBrowser.ServerBr
             case "fileChooserClosed":
             case "popup":
             case "pointer":
+            case "embeddedSession":
+            case "embeddedMessage":
             case "probe": {
               const { _tag: type, ...data } = output;
               return write(JSON.stringify({ type, ...data }));
@@ -181,7 +205,12 @@ const makeHandler = Effect.fnUntraced(function* (browser: ServerBrowser.ServerBr
         // Ownership serializes actions in the service. Keep reading so dialog
         // replies and takeover can unblock an action already waiting on the page.
         if (!isAck(message))
-          return canOperate
+          return canOperate ||
+            (document !== undefined &&
+              typeof message === "object" &&
+              message !== null &&
+              "type" in message &&
+              message.type === "embeddedMessage")
             ? viewer.input(message).pipe(Effect.forkScoped, Effect.asVoid)
             : Effect.void;
         const ack = inFlight;
@@ -284,14 +313,31 @@ const receiveUpload = Effect.fnUntraced(
   (effect, _browser, _params) => effect.pipe(Effect.scoped),
 );
 
-export const routeLayer = HttpRouter.use((router) =>
+// Capture the browser because handlers only see request-scoped services.
+export const routeLayerWithEmbeddedAssets = (
+  loadEmbeddedAsset: (path: string) => Effect.Effect<EmbeddedBrowserDocument | null>,
+) =>
+  HttpRouter.use((router) =>
+    Effect.gen(function* () {
+      const browser = yield* ServerBrowser.ServerBrowser;
+      const platform = yield* Effect.context<
+        HttpPlatform.HttpPlatform | FileSystem.FileSystem | Path.Path
+      >();
+      const handler = makeHandler(browser, loadEmbeddedAsset).pipe(Effect.provideContext(platform));
+      yield* router.add("GET", `${PREVIEW_STREAM_ROUTE_PREFIX}/*`, handler);
+      yield* router.add("POST", `${PREVIEW_STREAM_ROUTE_PREFIX}/upload`, handler);
+    }),
+  );
+
+export const routeLayer = Layer.unwrap(
   Effect.gen(function* () {
-    const browser = yield* ServerBrowser.ServerBrowser;
-    const platform = yield* Effect.context<
-      HttpPlatform.HttpPlatform | FileSystem.FileSystem | Path.Path
-    >();
-    const handler = makeHandler(browser).pipe(Effect.provideContext(platform));
-    yield* router.add("GET", `${PREVIEW_STREAM_ROUTE_PREFIX}/*`, handler);
-    yield* router.add("POST", `${PREVIEW_STREAM_ROUTE_PREFIX}/upload`, handler);
+    const services =
+      yield* Effect.context<Effect.Services<ReturnType<typeof embeddedBrowserAsset>>>();
+    return routeLayerWithEmbeddedAssets((path) =>
+      embeddedBrowserAsset(path).pipe(
+        Effect.provideContext(services),
+        Effect.orElseSucceed(() => null),
+      ),
+    );
   }),
 );

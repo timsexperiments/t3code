@@ -20,6 +20,8 @@ import { useWorkspaceEnvironments } from "../../state/workspace";
 import { relayEnvironmentDiscovery } from "../../state/relay";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { relayManagedEnvironmentIds } from "./environmentSections";
+import { removeServiceAuthForUrl } from "../../persistence/environment-service-auth";
+import { AsyncResult } from "effect/reactivity";
 
 export interface RelayEnvironmentView {
   readonly environment: RelayClientEnvironmentRecord;
@@ -89,8 +91,21 @@ export function useConnectionController() {
     [registerEnvironment],
   );
   const removeEnvironment = useCallback(
-    (environmentId: EnvironmentId) => removeEnvironmentMutation(environmentId),
-    [removeEnvironmentMutation],
+    async (environmentId: EnvironmentId) => {
+      const environment = connectedEnvironments.find(
+        (candidate) => candidate.environmentId === environmentId,
+      );
+      const result = await removeEnvironmentMutation(environmentId);
+      if (
+        AsyncResult.isSuccess(result) &&
+        environment !== undefined &&
+        !environment.isRelayManaged
+      ) {
+        await removeServiceAuthForUrl(environment.displayUrl).catch(() => undefined);
+      }
+      return result;
+    },
+    [connectedEnvironments, removeEnvironmentMutation],
   );
   const retryEnvironment = useCallback(
     (environmentId: EnvironmentId) => retryEnvironmentMutation(environmentId),

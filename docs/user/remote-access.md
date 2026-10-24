@@ -64,6 +64,26 @@ created in Settings can only be copied from the client that created them while
 its Connections page stays open. If you leave or reload that page, create
 another link to share.
 
+### Connect through an authentication proxy
+
+On mobile, choose **Service authentication → Custom** when adding a direct HTTPS
+environment and enter the headers required by your proxy. Edit them by opening the environment under
+**Settings → Environments**. Choose **None** to remove them.
+Values stay in secure storage on this device and apply only to the configured
+HTTPS origin, including its port. Requests to other environment origins receive no added headers.
+`Authorization` and `DPoP` are reserved for T3 Code. Pair with T3 Code as usual.
+
+Headers also apply to browser and device preview streams. Agent-generated HTML
+pages and MCP apps render on the phone and load their documents with these headers.
+Generated HTML can fetch signed assets from its environment with these headers.
+Direct image, stylesheet, and script URLs do not inherit the headers.
+MCP tool calls and resource reads use the authenticated environment connection.
+
+HTML file previews render in the environment's browser. Update the host and
+mobile app together for these previews. Browser streams do not forward
+audio, phone sensors, or DOM accessibility. Links opened in an external browser
+need separate proxy authentication.
+
 ### Reach one machine several ways
 
 A machine can have more than one route: LAN, Tailscale, another VPN, a public

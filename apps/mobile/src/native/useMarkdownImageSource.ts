@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
 import { useEnvironmentPresentation } from "../state/presentation";
 import { useEnvironmentQuery } from "../state/query";
@@ -39,7 +40,8 @@ export function useMarkdownImageSource(props: {
         workspaceRoot,
         imageEmbed: true,
       });
-      if (media?.access === "direct") return { uri: normalizeNativeMarkdownUrl(media.uri) };
+      if (media?.access === "direct")
+        return environmentMediaSource(normalizeNativeMarkdownUrl(media.uri));
       if (
         captured ||
         !fileAccess.canReadFiles ||
@@ -56,7 +58,7 @@ export function useMarkdownImageSource(props: {
       if (result._tag !== "Success") throw new Error("Could not authorize Markdown image");
       const uri = resolveAssetUrl(httpBaseUrl, result.value.relativeUrl);
       if (uri === null) throw new Error("Markdown image URL is invalid");
-      return { uri };
+      return environmentMediaSource(uri);
     },
     [
       captured,

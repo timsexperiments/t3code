@@ -5,8 +5,10 @@ import { build } from "vite-plus";
 
 const mobileRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 
-async function generateWebViewScript(feature: string, name: string) {
-  const stem = `${name.toLowerCase()}-stream`;
+/** Metro embeds each shared browser transport as a small script in a native WebView. */
+async function generateWebViewScript(options: { feature: string; stem: string; name: string }) {
+  const { feature, stem, name } = options;
+
   const result = await build({
     configFile: false,
     logLevel: "silent",
@@ -16,7 +18,7 @@ async function generateWebViewScript(feature: string, name: string) {
       minify: true,
       lib: {
         entry: NodePath.join(mobileRoot, "src/features", feature, `${stem}.browser.ts`),
-        name: `T3${name}Stream`,
+        name,
         formats: ["iife"],
       },
     },
@@ -38,5 +40,9 @@ async function generateWebViewScript(feature: string, name: string) {
   }
 }
 
-export const generateDeviceStreamScript = () => generateWebViewScript("devices", "Device");
-export const generatePreviewStreamScript = () => generateWebViewScript("browser", "Preview");
+export const generateDeviceStreamScript = () =>
+  generateWebViewScript({ feature: "devices", stem: "device-stream", name: "T3DeviceStream" });
+export const generatePreviewStreamScript = () =>
+  generateWebViewScript({ feature: "browser", stem: "preview-stream", name: "T3PreviewStream" });
+export const generateHtmlNetworkScript = () =>
+  generateWebViewScript({ feature: "threads", stem: "html-network", name: "T3HtmlNetwork" });

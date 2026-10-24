@@ -1,7 +1,9 @@
+import { environmentMediaSource } from "../lib/environment-network";
 import { Button } from "./ui/Button";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
 import * as Dialog from "./ui/Dialog";
+
 import type { ComposerContextRecord, EnvironmentId } from "@t3tools/contracts";
 import { Pressable, View } from "react-native";
 import { Image } from "expo-image";
@@ -104,7 +106,7 @@ export function ComposerContextAttachment(props: {
           <Image
             source={
               remoteEnvironmentId === null
-                ? { uri }
+                ? environmentMediaSource(uri)
                 : assetImageSource(remoteEnvironmentId, resource, uri)
             }
             style={{ width: "100%", height: 280 }}

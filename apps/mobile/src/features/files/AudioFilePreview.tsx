@@ -1,3 +1,4 @@
+import { environmentMediaSource } from "../../lib/environment-network";
 import { Button } from "../../components/ui/Button";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useEffect, useState } from "react";
@@ -11,7 +12,7 @@ function timestamp(seconds: number) {
 }
 
 export function AudioFilePreview(props: { uri: string; onRetry: () => void }) {
-  const player = useAudioPlayer({ uri: props.uri }, { updateInterval: 500 });
+  const player = useAudioPlayer(environmentMediaSource(props.uri), { updateInterval: 500 });
   const status = useAudioPlayerStatus(player);
   const [seekError, setSeekError] = useState(false);
   // Video teardown deactivates the shared iOS session, which would stop this player.
