@@ -11,6 +11,10 @@ public final class T3NativeControlsModule: Module {
 
   public func definition() -> ModuleDefinition {
     Events("videoPlaybackChange")
+    AsyncFunction("updateBrowserSession") { (origin: URL, clear: Bool) in
+      try await T3BrowserSession.update(origin: origin, clear: clear)
+    }
+
     Constants {
       if #available(iOS 26.0, *) {
         return [

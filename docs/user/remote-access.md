@@ -93,6 +93,13 @@ in the receiving app. Connection settings are under **Settings → Environments*
 on web and desktop and **Settings → Environments** on mobile. A loopback address
 such as `127.0.0.1` reaches only the device opening the link.
 
+On iOS, an HTTPS environment behind a browser sign-in can use **Sign in to
+environment** before pairing or reconnecting. Complete the sign-in, then choose
+**Continue**. This requires a browser cookie session and does not replace T3
+pairing. **Sign out** clears matching browser cookies, including domain cookies
+shared with other environments. Some identity providers do not allow embedded
+browser sign-in.
+
 On a computer with the desktop app, you can open the printed `t3code://pair`
 app link instead. The desktop app asks you to confirm the server address, then
 adds it.

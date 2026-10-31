@@ -478,7 +478,10 @@ export function ThreadMcpApp(props: {
   const source =
     uri === null
       ? null
-      : { html: outerDocument(uri, mcpAppAllowAttribute(app.permissions), secret) };
+      : {
+          html: outerDocument(uri, mcpAppAllowAttribute(app.permissions), secret),
+          baseUrl: new URL(uri).origin,
+        };
 
   if (presentedFullscreen) {
     return (
@@ -528,6 +531,7 @@ export function ThreadMcpApp(props: {
           ref={attachWebView}
           onContentProcessDidTerminate={restart}
           onRenderProcessGone={restart}
+          sharedCookiesEnabled
           source={source!}
           accessibilityLabel={`${app.server} app`}
           style={{ flex: 1, backgroundColor: "transparent" }}

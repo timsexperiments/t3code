@@ -121,6 +121,7 @@ export function HtmlRenderWebView(props: {
       <WebView<object>
         key={generation}
         ref={webView}
+        sharedCookiesEnabled
         source={source}
         accessibilityLabel={props.title}
         style={{ flex: 1, backgroundColor: "transparent" }}

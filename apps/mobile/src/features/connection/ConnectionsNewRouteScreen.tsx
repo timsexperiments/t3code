@@ -1,3 +1,4 @@
+import { EnvironmentBrowserSignIn } from "./EnvironmentBrowserSignIn";
 import { ListRow } from "../../components/ui/ListRow";
 import * as Dialog from "../../components/ui/Dialog";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
@@ -253,6 +254,8 @@ function PairingForm({
                 "For machines on your local network or tailnet. The machine keeps its own provider credentials."}
             </Text>
           </View>
+
+          <EnvironmentBrowserSignIn address={hostInput} />
 
           {hasCloudPublicConfig() ? <T3ConnectSection /> : null}
         </View>

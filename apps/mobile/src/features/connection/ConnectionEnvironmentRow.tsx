@@ -1,3 +1,4 @@
+import { EnvironmentBrowserSignIn } from "./EnvironmentBrowserSignIn";
 import * as Dialog from "../../components/ui/Dialog";
 import { ConnectionTraceId } from "./ConnectionTraceId";
 import { SymbolView } from "../../components/ui/AppSymbol";
@@ -249,6 +250,10 @@ export function ConnectionEnvironmentRow(props: {
                   />
                 </View>
               )}
+              <EnvironmentBrowserSignIn
+                address={props.environment.displayUrl}
+                onSignedIn={() => props.onReconnect(props.environment.environmentId)}
+              />
               <IconButton
                 accessibilityLabel="Reconnect environment"
                 icon="arrow.clockwise"
