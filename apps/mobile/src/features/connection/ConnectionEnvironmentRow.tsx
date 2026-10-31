@@ -236,6 +236,10 @@ export function ConnectionEnvironmentRow(props: {
             </>
           )}
 
+          <EnvironmentBrowserSignIn
+            address={props.environment.displayUrl}
+            onSignedIn={() => props.onReconnect(props.environment.environmentId)}
+          />
           {Platform.OS === "android" ? (
             <View className="flex-row items-center justify-end gap-2">
               {props.environment.isRelayManaged ? null : (
@@ -250,10 +254,6 @@ export function ConnectionEnvironmentRow(props: {
                   />
                 </View>
               )}
-              <EnvironmentBrowserSignIn
-                address={props.environment.displayUrl}
-                onSignedIn={() => props.onReconnect(props.environment.environmentId)}
-              />
               <IconButton
                 accessibilityLabel="Reconnect environment"
                 icon="arrow.clockwise"
